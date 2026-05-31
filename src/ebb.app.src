@@ -1,0 +1,14 @@
+{application, ebb, [
+    {description, "Erly Boot & Batch"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {ebb_app, []}},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["AGPL"]},
+    {links, []}
+]}.
