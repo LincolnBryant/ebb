@@ -33,7 +33,8 @@ init([]) ->
     {ok, #{}}.
 
 handle_call({handle_request, _Address, _Port, Msg}, _From, State) ->
-    logger:notice("Msg: ~p", [Msg]),
+    Decoded = ebb_dhcp_lib:decode_request(Msg),
+    logger:notice("Decoded DHCPd packet: ~p", [Decoded]),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
