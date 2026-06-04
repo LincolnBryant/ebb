@@ -7,16 +7,11 @@
 
 -include("dhcp.hrl").
 
-%% DHCP Message Types - Option 53
-%-define(DHCPDISCOVER, 1).
-%-define(DHCPOFFER, 2).
-%-define(DHCPREQUEST, 3).
-%-define(DHCPDECLINE, 4).
-%-define(DHCPACK, 5).
-%-define(DHCPNAK, 6).
-%-define(DHCPRELASE, 7).
-%-define(DHCPINFORM, 8).
-
+-doc """
+Decodes a DHCP packet into a #dhcp_message{} record. Fields are deserialized
+into Erlang types where possible. Not all sub-options are exhaustively
+deserialized. In such cases, the binary is passed through to the consumer.
+""".
 -spec decode(binary()) -> dhcp_message().
 decode(
     <<Op:8, HType:8, HLen:8, Hops:8, Xid:32, Secs:16, Flags:2/binary,
@@ -42,122 +37,166 @@ decode(
         options = decode_option_list(OptRaw)
     }.
 
+-doc """
+Decodes the message op copde into an Erlang atom. Only 1 = 'bootrequest' and 2
+= 'bootreply' are understood per
+https://www.rfc-editor.org/info/rfc2131/#section-2
+""".
+-spec decode_op(1..2) -> op().
 decode_op(1) -> bootrequest;
 decode_op(2) -> bootreply.
 
+-doc """
+Encodes the message op copde into an Erlang atom. Only 'bootrequest' = 1 and
+'bootreply' = 2 are understood per
+https://www.rfc-editor.org/info/rfc2131/#section-2
+""".
+-spec encode_op(op()) -> 1..2.
 encode_op(bootrequest) -> 1;
 encode_op(bootreply) -> 2.
 
-decode_htype(0) -> reserved;
-decode_htype(1) -> ethernet;
-decode_htype(2) -> experimental_ethernet;
-decode_htype(3) -> ax25;
-decode_htype(4) -> proteon_pronet_token_ring;
-decode_htype(5) -> chaos;
-decode_htype(6) -> ieee802;
-decode_htype(7) -> arcnet;
-decode_htype(8) -> hyperchannel;
-decode_htype(9) -> lanstar;
-decode_htype(10) -> autonet_short_address;
-decode_htype(11) -> localtalk;
-decode_htype(12) -> localnet;
-decode_htype(13) -> ultra_link;
-decode_htype(14) -> smds;
-decode_htype(15) -> frame_relay;
-decode_htype(16) -> atm_16;
-decode_htype(17) -> hdlc;
-decode_htype(18) -> fibre_channel;
-decode_htype(19) -> atm_19;
-decode_htype(20) -> serial_line;
-decode_htype(21) -> atm_21;
-decode_htype(22) -> mil_std_188_220;
-decode_htype(23) -> metricom;
-decode_htype(24) -> ieee1394;
-decode_htype(25) -> mapos;
-decode_htype(26) -> twinaxial;
-decode_htype(27) -> eui64;
-decode_htype(28) -> hiparp;
-decode_htype(29) -> ip_arp_iso_7816_3;
-decode_htype(30) -> arpsec;
-decode_htype(31) -> ipsec_tunnel;
-decode_htype(32) -> infiniband;
-decode_htype(33) -> tia_102_p25_cai;
-decode_htype(34) -> wiegand_interface;
-decode_htype(35) -> pure_ip;
-decode_htype(36) -> hw_exp1;
-decode_htype(37) -> hfi;
-decode_htype(256) -> hw_exp2;
-decode_htype(257) -> aethernet;
-%% RFC 4361 (DHCP client-id DUID)
-decode_htype(255) -> node_specific;
-decode_htype(N) when is_integer(N), N >= 0, N =< 65535 -> N.
+-doc """
+Decodes a DHCP hardware type per
+https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2
+and returns an atom. Unknown hardware types are returned as their integer value.
+""".
+-spec decode_htype(0..16#FFFF) -> htype().
+decode_htype(16#00) -> reserved;
+decode_htype(16#01) -> ethernet;
+decode_htype(16#02) -> experimental_ethernet;
+decode_htype(16#03) -> ax25;
+decode_htype(16#04) -> proteon_pronet_token_ring;
+decode_htype(16#05) -> chaos;
+decode_htype(16#06) -> ieee802;
+decode_htype(16#07) -> arcnet;
+decode_htype(16#08) -> hyperchannel;
+decode_htype(16#09) -> lanstar;
+decode_htype(16#0A) -> autonet_short_address;
+decode_htype(16#0B) -> localtalk;
+decode_htype(16#0C) -> localnet;
+decode_htype(16#0D) -> ultra_link;
+decode_htype(16#0E) -> smds;
+decode_htype(16#0F) -> frame_relay;
+decode_htype(16#10) -> atm_16;
+decode_htype(16#11) -> hdlc;
+decode_htype(16#12) -> fibre_channel;
+decode_htype(16#13) -> atm_19;
+decode_htype(16#14) -> serial_line;
+decode_htype(16#15) -> atm_21;
+decode_htype(16#16) -> mil_std_188_220;
+decode_htype(16#17) -> metricom;
+decode_htype(16#18) -> ieee1394;
+decode_htype(16#19) -> mapos;
+decode_htype(16#1A) -> twinaxial;
+decode_htype(16#1B) -> eui64;
+decode_htype(16#1C) -> hiparp;
+decode_htype(16#1D) -> ip_arp_iso_7816_3;
+decode_htype(16#1E) -> arpsec;
+decode_htype(16#1F) -> ipsec_tunnel;
+decode_htype(16#20) -> infiniband;
+decode_htype(16#21) -> tia_102_p25_cai;
+decode_htype(16#22) -> wiegand_interface;
+decode_htype(16#23) -> pure_ip;
+decode_htype(16#24) -> hw_exp1;
+decode_htype(16#26) -> unified_bus;
+decode_htype(N) when is_integer(N), N >= 0, N =< 16#FFFF -> N.
 
-encode_htype(reserved) -> 0;
-encode_htype(ethernet) -> 1;
-encode_htype(experimental_ethernet) -> 2;
-encode_htype(ax25) -> 3;
-encode_htype(proteon_pronet_token_ring) -> 4;
-encode_htype(chaos) -> 5;
-encode_htype(ieee802) -> 6;
-encode_htype(arcnet) -> 7;
-encode_htype(hyperchannel) -> 8;
-encode_htype(lanstar) -> 9;
-encode_htype(autonet_short_address) -> 10;
-encode_htype(localtalk) -> 11;
-encode_htype(localnet) -> 12;
-encode_htype(ultra_link) -> 13;
-encode_htype(smds) -> 14;
-encode_htype(frame_relay) -> 15;
-encode_htype(atm_16) -> 16;
-encode_htype(hdlc) -> 17;
-encode_htype(fibre_channel) -> 18;
-encode_htype(atm_19) -> 19;
-encode_htype(serial_line) -> 20;
-encode_htype(atm_21) -> 21;
-encode_htype(mil_std_188_220) -> 22;
-encode_htype(metricom) -> 23;
-encode_htype(ieee1394) -> 24;
-encode_htype(mapos) -> 25;
-encode_htype(twinaxial) -> 26;
-encode_htype(eui64) -> 27;
-encode_htype(hiparp) -> 28;
-encode_htype(ip_arp_iso_7816_3) -> 29;
-encode_htype(arpsec) -> 30;
-encode_htype(ipsec_tunnel) -> 31;
-encode_htype(infiniband) -> 32;
-encode_htype(tia_102_p25_cai) -> 33;
-encode_htype(wiegand_interface) -> 34;
-encode_htype(pure_ip) -> 35;
-encode_htype(hw_exp1) -> 36;
-encode_htype(hfi) -> 37;
-encode_htype(node_specific) -> 255;
-encode_htype(hw_exp2) -> 256;
-encode_htype(aethernet) -> 257;
-encode_htype(N) when is_integer(N), N >= 0, N =< 65535 -> N.
+-doc """
+Encodes a DHCP hardware type per
+https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2
+and returns an integer value. Unknown hardware types will crash.
+""".
+-spec encode_htype(htype()) -> 0..16#FFFF.
+encode_htype(reserved) -> 16#00;
+encode_htype(ethernet) -> 16#01;
+encode_htype(experimental_ethernet) -> 16#02;
+encode_htype(ax25) -> 16#03;
+encode_htype(proteon_pronet_token_ring) -> 16#04;
+encode_htype(chaos) -> 16#05;
+encode_htype(ieee802) -> 16#06;
+encode_htype(arcnet) -> 16#07;
+encode_htype(hyperchannel) -> 16#08;
+encode_htype(lanstar) -> 16#09;
+encode_htype(autonet_short_address) -> 16#0A;
+encode_htype(localtalk) -> 16#0B;
+encode_htype(localnet) -> 16#0C;
+encode_htype(ultra_link) -> 16#0D;
+encode_htype(smds) -> 16#0E;
+encode_htype(frame_relay) -> 16#0F;
+encode_htype(atm_16) -> 16#10;
+encode_htype(hdlc) -> 16#11;
+encode_htype(fibre_channel) -> 16#12;
+encode_htype(atm_19) -> 16#13;
+encode_htype(serial_line) -> 16#14;
+encode_htype(atm_21) -> 16#15;
+encode_htype(mil_std_188_220) -> 16#16;
+encode_htype(metricom) -> 16#17;
+encode_htype(ieee1394) -> 16#18;
+encode_htype(mapos) -> 16#19;
+encode_htype(twinaxial) -> 16#1A;
+encode_htype(eui64) -> 16#1B;
+encode_htype(hiparp) -> 16#1C;
+encode_htype(ip_arp_iso_7816_3) -> 16#1D;
+encode_htype(arpsec) -> 16#1E;
+encode_htype(ipsec_tunnel) -> 16#1F;
+encode_htype(infiniband) -> 16#20;
+encode_htype(tia_102_p25_cai) -> 16#21;
+encode_htype(wiegand_interface) -> 16#22;
+encode_htype(pure_ip) -> 16#23;
+encode_htype(hw_exp1) -> 16#24;
+encode_htype(hfi) -> 16#25;
+encode_htype(unified_bus) -> 16#26.
 
 % DHCPv4 only defines a broadcast flag in the 16-bit field. It's either on or off.
+-doc """
+Decodes flags per https://www.rfc-editor.org/info/rfc2131/#page-11. If the
+highest bit is set, [broadcast] is returned. All other bits currently return an
+empty list, but should be modified if a future RFC changes this behavior.
+""".
+-spec decode_flags(<<_:16>>) -> dhcp_flags().
 decode_flags(<<1:1, _:15>>) -> [broadcast];
 decode_flags(<<_:16>>) -> [].
 
+-doc """
+Encodes the broadcast flag, or no flags per
+https://www.rfc-editor.org/info/rfc2131/#page-11. Should be modified if a
+future RFC changes this behavior.
+""".
+-spec encode_flags(dhcp_flags()) -> <<_:16>>.
 encode_flags([broadcast]) ->
     <<16#8000:16>>;
 encode_flags([]) ->
     <<16#0000:16>>.
 
-decode_ip(0) ->
-    % can be zero
-    {0, 0, 0, 0};
+-doc """
+Decodes an IP address into a 4-tuple, as defined by inet:ip4_address().
+""".
+-spec decode_ip(<<_:32>>) -> inet:ip4_address().
 decode_ip(<<A:8, B:8, C:8, D:8>>) ->
     {A, B, C, D}.
 
+-doc """
+Encodes a 4-tuple IP address into a 4-byte binary.
+""".
+-spec encode_ip(inet:ip4_address()) -> <<_:32>>.
 encode_ip({A, B, C, D}) ->
     <<A:8, B:8, C:8, D:8>>.
 
+-doc """
+Decode a MAC address into a 6-tuple in a manner similar to inet:ip4_address().
+Accepts either a 6-byte MAC address or a 16-byte padded MAC address per RFC
+2131.
+""".
+-spec decode_mac(<<_:48>> | <<_:128>>) -> mac_address().
 decode_mac(<<A:8, B:8, C:8, D:8, E:8, F:8>>) ->
     {A, B, C, D, E, F};
 decode_mac(<<A:8, B:8, C:8, D:8, E:8, F:8, _Padding:10/binary>>) ->
     {A, B, C, D, E, F}.
 
+-doc """
+Encode a 6-tuple MAC address into a 16-byte binary with zeroes padding the
+remaining 10 bytes.
+""".
 encode_mac({A, B, C, D, E, F}) ->
     <<A:8, B:8, C:8, D:8, E:8, F:8, 0:80>>.
 
@@ -277,29 +316,180 @@ decode_vivso_list(Bin) ->
 decode_ipxe_suboption_list(Bin) ->
     decode_tlv(Bin, fun decode_ipxe_suboption/2).
 
-decode_arch(0) ->
+% https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture
+decode_arch(16#0000) ->
     x86_bios;
-decode_arch(1) ->
+decode_arch(16#0001) ->
     nec_pc98;
-decode_arch(2) ->
+decode_arch(16#0002) ->
     efi_itanium;
-decode_arch(3) ->
+decode_arch(16#0003) ->
     dec_alpha;
-decode_arch(4) ->
+decode_arch(16#0004) ->
     arc_x86;
-decode_arch(5) ->
+decode_arch(16#0005) ->
     intel_lean_client;
-decode_arch(6) ->
-    efi_ia32;
-decode_arch(7) ->
-    efi_bc;
-decode_arch(8) ->
+decode_arch(16#0006) ->
+    x86_uefi;
+decode_arch(16#0007) ->
+    x64_uefi;
+decode_arch(16#0008) ->
     efi_xscale;
-decode_arch(9) ->
-    efi_x86_64;
-decode_arch(N) ->
+decode_arch(16#0009) ->
+    ebc;
+decode_arch(16#000A) ->
+    arm_32_uefi;
+decode_arch(16#000B) ->
+    arm_64_uefi;
+decode_arch(16#000C) ->
+    powerpc_open_firmware;
+decode_arch(16#000D) ->
+    powerpc_epapr;
+decode_arch(16#000E) ->
+    power_opal_v3;
+decode_arch(16#000F) ->
+    x86_uefi_http;
+decode_arch(16#0010) ->
+    x64_uefi_http;
+decode_arch(16#0011) ->
+    ebc_http;
+decode_arch(16#0012) ->
+    arm_32_uefi_http;
+decode_arch(16#0013) ->
+    arm_64_uefi_http;
+decode_arch(16#0014) ->
+    x86_bios_http;
+decode_arch(16#0015) ->
+    arm_32_uboot;
+decode_arch(16#0016) ->
+    arm_64_uboot;
+decode_arch(16#0017) ->
+    arm_32_uboot_http;
+decode_arch(16#0018) ->
+    arm_64_uboot_http;
+decode_arch(16#0019) ->
+    riscv_32_uefi;
+decode_arch(16#001A) ->
+    riscv_32_uefi_http;
+decode_arch(16#001B) ->
+    riscv_64_uefi;
+decode_arch(16#001C) ->
+    riscv_64_uefi_http;
+decode_arch(16#001D) ->
+    riscv_128_uefi;
+decode_arch(16#001E) ->
+    riscv_128_uefi_http;
+decode_arch(16#001F) ->
+    s390_basic;
+decode_arch(16#0020) ->
+    s390_extended;
+decode_arch(16#0021) ->
+    mips_32_uefi;
+decode_arch(16#0022) ->
+    mips_64_uefi;
+decode_arch(16#0023) ->
+    sunway_32_uefi;
+decode_arch(16#0024) ->
+    sunway_64_uefi;
+decode_arch(16#0025) ->
+    loongarch_32_uefi;
+decode_arch(16#0026) ->
+    loongarch_32_uefi_http;
+decode_arch(16#0027) ->
+    loongarch_64_uefi;
+decode_arch(16#0028) ->
+    loongarch_64_uefi_http;
+decode_arch(16#0029) ->
+    arm_rpiboot;
+decode_arch(N) when is_integer(N), N >= 0, N =< 16#FFFF ->
     logger:debug("Decoding arch ~p not implemented", [N]),
     N.
+
+encode_arch(x86_bios) ->
+    16#0000;
+encode_arch(nec_pc98) ->
+    16#0001;
+encode_arch(efi_itanium) ->
+    16#0002;
+encode_arch(dec_alpha) ->
+    16#0003;
+encode_arch(arc_x86) ->
+    16#0004;
+encode_arch(intel_lean_client) ->
+    16#0005;
+encode_arch(x86_uefi) ->
+    16#0006;
+encode_arch(x64_uefi) ->
+    16#0007;
+encode_arch(efi_xscale) ->
+    16#0008;
+encode_arch(ebc) ->
+    16#0009;
+encode_arch(arm_32_uefi) ->
+    16#000A;
+encode_arch(arm_64_uefi) ->
+    16#000B;
+encode_arch(powerpc_open_firmware) ->
+    16#000C;
+encode_arch(powerpc_epapr) ->
+    16#000D;
+encode_arch(power_opal_v3) ->
+    16#000E;
+encode_arch(x86_uefi_http) ->
+    16#000F;
+encode_arch(x64_uefi_http) ->
+    16#0010;
+encode_arch(ebc_http) ->
+    16#0011;
+encode_arch(arm_32_uefi_http) ->
+    16#0012;
+encode_arch(arm_64_uefi_http) ->
+    16#0013;
+encode_arch(x86_bios_http) ->
+    16#0014;
+encode_arch(arm_32_uboot) ->
+    16#0015;
+encode_arch(arm_64_uboot) ->
+    16#0016;
+encode_arch(arm_32_uboot_http) ->
+    16#0017;
+encode_arch(arm_64_uboot_http) ->
+    16#0018;
+encode_arch(riscv_32_uefi) ->
+    16#0019;
+encode_arch(riscv_32_uefi_http) ->
+    16#001A;
+encode_arch(riscv_64_uefi) ->
+    16#001B;
+encode_arch(riscv_64_uefi_http) ->
+    16#001C;
+encode_arch(riscv_128_uefi) ->
+    16#001D;
+encode_arch(riscv_128_uefi_http) ->
+    16#001E;
+encode_arch(s390_basic) ->
+    16#001F;
+encode_arch(s390_extended) ->
+    16#0020;
+encode_arch(mips_32_uefi) ->
+    16#0021;
+encode_arch(mips_64_uefi) ->
+    16#0022;
+encode_arch(sunway_32_uefi) ->
+    16#0023;
+encode_arch(sunway_64_uefi) ->
+    16#0024;
+encode_arch(loongarch_32_uefi) ->
+    16#0025;
+encode_arch(loongarch_32_uefi_http) ->
+    16#0026;
+encode_arch(loongarch_64_uefi) ->
+    16#0027;
+encode_arch(loongarch_64_uefi_http) ->
+    16#0028;
+encode_arch(arm_rpiboot) ->
+    16#0029.
+
 %% 177 bus_id
 decode_ipxe_suboption(16#b1, <<Type, Vendor:16, Device:16>>) ->
     {bus_id, {Type, Vendor, Device}};
@@ -317,48 +507,26 @@ decode_ipxe_suboption(Tag, <<0>>) when Tag >= 16#10, Tag =< 16#4f ->
 decode_ipxe_suboption(Tag, Value) ->
     {decode_ipxe_feature(Tag), Value}.
 
-%% 16
 decode_ipxe_feature(16#10) -> pxe_ext;
-%% 17
 decode_ipxe_feature(16#11) -> iscsi;
-%% 18
 decode_ipxe_feature(16#12) -> aoe;
-%% 19
 decode_ipxe_feature(16#13) -> http;
-%% 20
 decode_ipxe_feature(16#14) -> https;
-%% 21
 decode_ipxe_feature(16#15) -> tftp;
-%% 22
 decode_ipxe_feature(16#16) -> ftp;
-%% 23
 decode_ipxe_feature(16#17) -> dns;
-%% 24
 decode_ipxe_feature(16#18) -> bzimage;
-%% 25
 decode_ipxe_feature(16#19) -> multiboot;
-%% 26
 decode_ipxe_feature(16#1a) -> slam;
-%% 27
 decode_ipxe_feature(16#1b) -> srp;
-%% 32
 decode_ipxe_feature(16#20) -> nbi;
-%% 33
 decode_ipxe_feature(16#21) -> pxe;
-%% 34
 decode_ipxe_feature(16#22) -> elf;
-%% 35
 decode_ipxe_feature(16#23) -> comboot;
-%% 36
 decode_ipxe_feature(16#24) -> efi;
-%% 37
 decode_ipxe_feature(16#25) -> fcoe;
-%% 38
 decode_ipxe_feature(16#26) -> vlan;
-%% 39
 decode_ipxe_feature(16#27) -> menu;
-%% 40
 decode_ipxe_feature(16#28) -> sdi;
-%% 41
 decode_ipxe_feature(16#29) -> nfs;
 decode_ipxe_feature(N) -> N.
