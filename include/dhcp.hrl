@@ -28,10 +28,28 @@
 
 -type op() :: bootrequest | bootreply.
 -type mac_address() :: {byte(), byte(), byte(), byte(), byte(), byte()}.
--type ib_mac_address() :: {byte(), byte(), byte(), byte(), byte(),
-                   byte(), byte(), byte(), byte(), byte(),
-                   byte(), byte(), byte(), byte(), byte(),
-                   byte(), byte(), byte(), byte(), byte()}.
+-type ib_mac_address() :: {
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte(),
+    byte()
+}.
 -type dhcp_flags() :: [dhcp_flag()].
 -type dhcp_flag() :: broadcast.
 -type htype() ::

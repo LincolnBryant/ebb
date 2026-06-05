@@ -42,54 +42,42 @@ decode(
 Encodes a #dhcp_message{} record into a DHCP packet. Fields are serialized per RFC 2131, section 2: https://datatracker.ietf.org/doc/html/rfc2131#section-2
 """.
 -spec encode(dhcp_message()) -> binary().
-encode(#dhcp_message{ 
-		  op = Op,
-		  htype = HType,
-		  hlen = HLen,
-		  hops = Hops,
-		  xid = Xid,
-		  secs = Secs,
-		  flags = Flags,
-		  ciaddr = CiAddr,
-		  yiaddr = YiAddr,
-		  siaddr = SiAddr,
-		  giaddr = GiAddr,
-		  chaddr = ChAddr,
-		  sname = SName,
-		  file = File,
-		  options = _Options
-		 }) ->
-	OpBin = encode_uint8(encode_op(Op)),
-	HTypeBin = encode_uint8(encode_htype(HType)),
-	HLenBin = encode_uint8(HLen),
-	HopsBin = encode_uint8(Hops),
-	XidBin = encode_uint32(Xid),
-	SecsBin = encode_uint16(Secs),
-	FlagsBin = encode_flags(Flags),
-	CiAddrBin = encode_ip(CiAddr),
-	YiAddrBin = encode_ip(YiAddr),
-	SiAddrBin = encode_ip(SiAddr),
-	GiAddrBin = encode_ip(GiAddr),
-	ChAddrBin = encode_mac(ChAddr),
-	SNameBin = encode_padded_string(SName, 64),
-	FileBin = encode_padded_string(File, 128),
-	OptionsBin = <<>>,
-	<< OpBin/binary, 
-	   HTypeBin/binary, 
-	   HLenBin/binary, 
-	   HopsBin/binary, 
-	   XidBin/binary,
-	   SecsBin/binary,
-	   FlagsBin/binary,
-	   CiAddrBin/binary,
-	   YiAddrBin/binary,
-	   SiAddrBin/binary,
-	   GiAddrBin/binary,
-	   ChAddrBin/binary,
-	   SNameBin/binary,
-	   FileBin/binary,
-	   ?DHCP_MAGIC_COOKIE:32,
-	   OptionsBin/binary >>.
+encode(#dhcp_message{
+    op = Op,
+    htype = HType,
+    hlen = HLen,
+    hops = Hops,
+    xid = Xid,
+    secs = Secs,
+    flags = Flags,
+    ciaddr = CiAddr,
+    yiaddr = YiAddr,
+    siaddr = SiAddr,
+    giaddr = GiAddr,
+    chaddr = ChAddr,
+    sname = SName,
+    file = File,
+    options = _Options
+}) ->
+    OpBin = encode_uint8(encode_op(Op)),
+    HTypeBin = encode_uint8(encode_htype(HType)),
+    HLenBin = encode_uint8(HLen),
+    HopsBin = encode_uint8(Hops),
+    XidBin = encode_uint32(Xid),
+    SecsBin = encode_uint16(Secs),
+    FlagsBin = encode_flags(Flags),
+    CiAddrBin = encode_ip(CiAddr),
+    YiAddrBin = encode_ip(YiAddr),
+    SiAddrBin = encode_ip(SiAddr),
+    GiAddrBin = encode_ip(GiAddr),
+    ChAddrBin = encode_mac(ChAddr),
+    SNameBin = encode_padded_string(SName, 64),
+    FileBin = encode_padded_string(File, 128),
+    OptionsBin = <<>>,
+    <<OpBin/binary, HTypeBin/binary, HLenBin/binary, HopsBin/binary, XidBin/binary,
+        SecsBin/binary, FlagsBin/binary, CiAddrBin/binary, YiAddrBin/binary,
+        SiAddrBin/binary, GiAddrBin/binary, ChAddrBin/binary, SNameBin/binary,
+        FileBin/binary, ?DHCP_MAGIC_COOKIE:32, OptionsBin/binary>>.
 
 % Useful encoding helpers
 
@@ -126,10 +114,10 @@ Encodes the message op copde into an Erlang atom. Only 'bootrequest' = 1 and
 https://www.rfc-editor.org/info/rfc2131/#section-2
 """.
 -spec encode_op(op()) -> 1..2.
-encode_op(bootrequest) -> 
-	1;
-encode_op(bootreply) -> 
-	2.
+encode_op(bootrequest) ->
+    1;
+encode_op(bootreply) ->
+    2.
 
 -doc """
 Decodes a DHCP hardware type per
@@ -277,20 +265,15 @@ remaining 10 bytes.
 encode_mac({A, B, C, D, E, F}) ->
     <<A:8, B:8, C:8, D:8, E:8, F:8, 0:80>>.
 
-
 -doc "Decodes an Infiniband MAC into a 20-tuple. TBD if useful".
 -spec decode_ib_mac(<<_:160>>) -> ib_mac_address().
-decode_ib_mac(<<A, B, C, D, E, F, G, H, I, J,
-               K, L, M, N, O, P, Q, R, S, T>>) ->
-    {A, B, C, D, E, F, G, H, I, J,
-     K, L, M, N, O, P, Q, R, S, T}.
+decode_ib_mac(<<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T>>) ->
+    {A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T}.
 
 -doc "Encodes an Infiniband MAC from a 20-tuple into a 20-byte binary".
 -spec encode_ib_mac(ib_mac_address()) -> <<_:160>>.
-encode_ib_mac({A, B, C, D, E, F, G, H, I, J,
-               K, L, M, N, O, P, Q, R, S, T}) ->
-    <<A, B, C, D, E, F, G, H, I, J,
-      K, L, M, N, O, P, Q, R, S, T>>.
+encode_ib_mac({A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T}) ->
+    <<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T>>.
 
 -doc """
 Decode a Tag-Length-Value structure
@@ -311,22 +294,19 @@ decode_tlv(<<Tag, Len, Value:Len/binary, Rest/binary>>, F, Acc) ->
 Encode a Tag-Length-Value structure.
 """.
 -spec encode_tlv([tuple()], fun()) -> binary().
-encode_tlv(TupleList, EncodeFun) -> 
-	encode_tlv(TupleList, EncodeFun, []).
+encode_tlv(TupleList, EncodeFun) ->
+    encode_tlv(TupleList, EncodeFun, []).
 
 encode_tlv([], EncodeFun, Acc) ->
-	Acc;
+    Acc;
 encode_tlv([{Tag, Value} | Rest], F, Acc) ->
-	encode_tlv(Rest, [ F(Tag, Value) | Acc ]).
-
-
+    encode_tlv(Rest, [F(Tag, Value) | Acc]).
 
 decode_option_list(Bin) ->
     decode_tlv(Bin, fun decode_option/2).
 
 encode_option_list(TupleList) ->
-	encode_tlv(TupleList, fun encode_option/2).
-
+    encode_tlv(TupleList, fun encode_option/2).
 
 decode_option(1, <<A, B, C, D>>) ->
     {subnet_mask, {A, B, C, D}};
@@ -365,41 +345,43 @@ decode_option(Tag, Val) ->
     {Tag, Val}.
 
 encode_option({subnet_mask, {A, B, C, D}}) ->
-	Bin = encode_ip({A,B,C,D}),
-	Len = byte_size(Bin),
+    Bin = encode_ip({A, B, C, D}),
+    Len = byte_size(Bin),
     <<1, Len, Bin/binary>>;
 encode_option({host_name, Bin}) ->
-	Len = byte_size(Bin),
+    Len = byte_size(Bin),
     <<12, Len, Bin/binary>>;
 encode_option({requested_ip, {A, B, C, D}}) ->
-	Bin = encode_ip({A,B,C,D}),
-	Len = byte_size(Bin),
+    Bin = encode_ip({A, B, C, D}),
+    Len = byte_size(Bin),
     <<50, Len, Bin/binary>>;
-encode_option({lease_time, Secs}) 
-	when Secs >= 16#00000000, Secs =< 16#FFFFFFFF ->
-	Len = 4,
+encode_option({lease_time, Secs}) when
+    Secs >= 16#00000000, Secs =< 16#FFFFFFFF
+->
+    Len = 4,
     <<51, Len, Secs:32>>;
 encode_option({message_type, Type}) ->
-	Bin = encode_uint8(encode_msgtype(Type)),
-	Len = byte_size(Bin),
+    Bin = encode_uint8(encode_msgtype(Type)),
+    Len = byte_size(Bin),
     <<53, Len, Bin/binary>>;
 encode_option({server_id, {A, B, C, D}}) ->
-	Bin = encode_ip({A,B,C,D}),
-	Len = byte_size(Bin),
+    Bin = encode_ip({A, B, C, D}),
+    Len = byte_size(Bin),
     <<54, Len, Bin/binary>>;
 encode_option({parameter_list, List}) ->
-	% TODO: Add some guards to make sure this is all integers between 0..255
+    % TODO: Add some guards to make sure this is all integers between 0..255
     Bin = list_to_binary(List),
     <<55, (byte_size(Bin)), Bin/binary>>;
-encode_option({max_message_size, Size}) 
-	when Size >= 16#0000, Size =< 16#FFFF ->
-	Len = 2,
+encode_option({max_message_size, Size}) when
+    Size >= 16#0000, Size =< 16#FFFF
+->
+    Len = 2,
     <<57, Len, Size:16>>;
 encode_option({vendor_class_id, Bin}) ->
     <<60, (byte_size(Bin)), Bin/binary>>;
 encode_option({client_id, ClientId}) ->
     Bin = encode_client_id(ClientId),
-	Len = byte_size(Bin),
+    Len = byte_size(Bin),
     <<61, Len, Bin/binary>>;
 encode_option({client_system, Arch}) ->
     <<93, 2, (encode_arch(Arch)):16>>;
@@ -415,7 +397,6 @@ encode_option({vivso, Vivso}) ->
 encode_option({ipxe_encap, SubOpts}) ->
     Bin = encode_ipxe_suboption_list(SubOpts),
     <<175, (byte_size(Bin)), Bin/binary>>.
-
 
 decode_msgtype(1) ->
     dhcpdiscover;
@@ -494,10 +475,10 @@ decode_client_id(<<HType, Addr/binary>>) ->
 encode_client_id({non_hardware, Id}) ->
     <<16#00, Id/binary>>;
 encode_client_id({ethernet, Mac}) ->
-	Bin = encode_mac(Mac),
+    Bin = encode_mac(Mac),
     <<16#01, Bin/binary>>;
 encode_client_id({infiniband, Mac}) ->
-	Bin = encode_ib_mac(Mac),
+    Bin = encode_ib_mac(Mac),
     <<16#20, Bin/binary>>.
 
 decode_vivso_list(Bin) ->
@@ -505,16 +486,16 @@ decode_vivso_list(Bin) ->
     Bin.
 
 encode_vivso_list(_) ->
-	% TODO
-	<<>>.
+    % TODO
+    <<>>.
 
 decode_ipxe_suboption_list(Bin) ->
     decode_tlv(Bin, fun decode_ipxe_suboption/2).
 
 encode_ipxe_suboption_list(TupleList) ->
-	% encode_tlv(TupleList, fun encode_ipxe_suboption/2).
-	% TODO
-	<<>>.
+    % encode_tlv(TupleList, fun encode_ipxe_suboption/2).
+    % TODO
+    <<>>.
 
 % https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture
 decode_arch(16#0000) ->
