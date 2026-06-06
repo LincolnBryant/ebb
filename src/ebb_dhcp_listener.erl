@@ -27,7 +27,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({udp, Socket, Addr, Port, Packet}, State) ->
-	{ok, Msg} = decode(Packet),
+    {ok, Msg} = decode(Packet),
     ebb_dhcpd:handle_request(Addr, Port, Msg),
     inet:setopts(Socket, [{active, once}]),
     {noreply, State}.
