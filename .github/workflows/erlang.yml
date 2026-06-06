@@ -1,0 +1,32 @@
+name: Erlang CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Compile
+      run: rebar3 compile
+    - name: Format
+      run: rebar3 fmt --check
+    - name: Hank
+      run: rebar3 hank
+    - name: Dialyzer
+      run: rebar3 dialyzer
+    - name: EUnit Tests
+      run: rebar3 eunit
