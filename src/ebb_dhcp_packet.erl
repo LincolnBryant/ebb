@@ -5,6 +5,8 @@
 -export([encode/1]).
 %-export([
 %		]).
+-export([decode_part/1]).
+-export([encode_part/1]).
 
 -include("dhcp.hrl").
 
@@ -38,8 +40,36 @@ decode(
         options = decode_option_list(OptRaw)
     }.
 
+decode_part(
+    <<Op:8, HType:8, HLen:8, Hops:8, Xid:32, Secs:16, Flags:2/binary,
+        CiAddr:4/binary, YiAddr:4/binary, SiAddr:4/binary, GiAddr:4/binary,
+        ChAddr:16/binary, SName:64/binary, File:128/binary, ?DHCP_MAGIC_COOKIE:32,
+        OptRaw/binary>>
+) ->
+	[Op, HType, HLen, Hops, Xid, Secs, Flags, CiAddr, YiAddr, SiAddr, GiAddr, ChAddr, SName, File, OptRaw].
+
+encode_part(#dhcp_message{
+    op = Op,
+    htype = HType,
+    hlen = HLen,
+    hops = Hops,
+    xid = Xid,
+    secs = Secs,
+    flags = Flags,
+    ciaddr = CiAddr,
+    yiaddr = YiAddr,
+    siaddr = SiAddr,
+    giaddr = GiAddr,
+    chaddr = ChAddr,
+    sname = SName,
+    file = File,
+    options = Options
+}) ->
+	[Op, HType, HLen, Hops, Xid, Secs, Flags, CiAddr, YiAddr, SiAddr, GiAddr, ChAddr, SName, File, Options].
+
 -doc """
-Encodes a #dhcp_message{} record into a DHCP packet. Fields are serialized per RFC 2131, section 2: https://datatracker.ietf.org/doc/html/rfc2131#section-2
+Encodes a #dhcp_message{} record into a DHCP packet. Fields are serialized per
+RFC 2131, section 2: https://datatracker.ietf.org/doc/html/rfc2131#section-2
 """.
 -spec encode(dhcp_message()) -> binary().
 encode(#dhcp_message{
@@ -57,7 +87,7 @@ encode(#dhcp_message{
     chaddr = ChAddr,
     sname = SName,
     file = File,
-    options = _Options
+    options = Options
 }) ->
     OpBin = encode_uint8(encode_op(Op)),
     HTypeBin = encode_uint8(encode_htype(HType)),
@@ -70,10 +100,10 @@ encode(#dhcp_message{
     YiAddrBin = encode_ip(YiAddr),
     SiAddrBin = encode_ip(SiAddr),
     GiAddrBin = encode_ip(GiAddr),
-    ChAddrBin = encode_mac(ChAddr),
+    ChAddrBin = << (encode_mac(ChAddr))/binary, 0:80 >>, % 10 bytes of padding
     SNameBin = encode_padded_string(SName, 64),
     FileBin = encode_padded_string(File, 128),
-    OptionsBin = <<>>,
+    OptionsBin = encode_option_list(Options),
     <<OpBin/binary, HTypeBin/binary, HLenBin/binary, HopsBin/binary, XidBin/binary,
         SecsBin/binary, FlagsBin/binary, CiAddrBin/binary, YiAddrBin/binary,
         SiAddrBin/binary, GiAddrBin/binary, ChAddrBin/binary, SNameBin/binary,
@@ -258,12 +288,11 @@ decode_mac(<<A:8, B:8, C:8, D:8, E:8, F:8, _Padding:10/binary>>) ->
     {A, B, C, D, E, F}.
 
 -doc """
-Encode a 6-tuple MAC address into a 16-byte binary with zeroes padding the
-remaining 10 bytes.
+Encode a 6-tuple MAC address
 """.
--spec encode_mac(mac_address()) -> <<_:128>>.
+-spec encode_mac(mac_address()) -> <<_:48>>.
 encode_mac({A, B, C, D, E, F}) ->
-    <<A:8, B:8, C:8, D:8, E:8, F:8, 0:80>>.
+    <<A:8, B:8, C:8, D:8, E:8, F:8>>.
 
 -doc "Decodes an Infiniband MAC into a 20-tuple. TBD if useful".
 -spec decode_ib_mac(<<_:160>>) -> ib_mac_address().
@@ -297,10 +326,10 @@ Encode a Tag-Length-Value structure.
 encode_tlv(TupleList, EncodeFun) ->
     encode_tlv(TupleList, EncodeFun, []).
 
-encode_tlv([], EncodeFun, Acc) ->
-    Acc;
+encode_tlv([], _F, Acc) ->
+    << (list_to_binary(Acc))/binary, 255 >>;
 encode_tlv([{Tag, Value} | Rest], F, Acc) ->
-    encode_tlv(Rest, [F(Tag, Value) | Acc]).
+    encode_tlv(Rest, F, [F(Tag, Value) | Acc]).
 
 decode_option_list(Bin) ->
     decode_tlv(Bin, fun decode_option/2).
@@ -327,6 +356,7 @@ decode_option(57, <<Size:16>>) ->
 decode_option(60, Bin) ->
     {vendor_class_id, Bin};
 decode_option(61, Bin) ->
+	io:format("Pre: ~p~n", [Bin]),
     {client_id, decode_client_id(Bin)};
 decode_option(93, <<Arch:16>>) ->
     {client_system, decode_arch(Arch)};
@@ -337,64 +367,62 @@ decode_option(77, Bin) ->
 decode_option(97, <<0, GUID:16/binary>>) ->
     {client_uuid, GUID};
 decode_option(125, Bin) ->
-    {vivso, decode_vivso_list(Bin)};
+    {vivso, Bin};
 decode_option(175, Bin) ->
     {ipxe_encap, decode_ipxe_suboption_list(Bin)};
 decode_option(Tag, Val) ->
     logger:debug("Not implemented: {~p,~p}", [Tag, Val]),
     {Tag, Val}.
 
-encode_option({subnet_mask, {A, B, C, D}}) ->
+encode_option(subnet_mask, {A, B, C, D}) ->
     Bin = encode_ip({A, B, C, D}),
     Len = byte_size(Bin),
     <<1, Len, Bin/binary>>;
-encode_option({host_name, Bin}) ->
+encode_option(host_name, Bin) ->
     Len = byte_size(Bin),
     <<12, Len, Bin/binary>>;
-encode_option({requested_ip, {A, B, C, D}}) ->
+encode_option(requested_ip, {A, B, C, D}) ->
     Bin = encode_ip({A, B, C, D}),
     Len = byte_size(Bin),
     <<50, Len, Bin/binary>>;
-encode_option({lease_time, Secs}) when
+encode_option(lease_time, Secs) when
     Secs >= 16#00000000, Secs =< 16#FFFFFFFF
 ->
     Len = 4,
     <<51, Len, Secs:32>>;
-encode_option({message_type, Type}) ->
+encode_option(message_type, Type) ->
     Bin = encode_uint8(encode_msgtype(Type)),
     Len = byte_size(Bin),
     <<53, Len, Bin/binary>>;
-encode_option({server_id, {A, B, C, D}}) ->
+encode_option(server_id, {A, B, C, D}) ->
     Bin = encode_ip({A, B, C, D}),
     Len = byte_size(Bin),
     <<54, Len, Bin/binary>>;
-encode_option({parameter_list, List}) ->
-    % TODO: Add some guards to make sure this is all integers between 0..255
-    Bin = list_to_binary(List),
+encode_option(parameter_list, List) ->
+    Bin = encode_parameter_list(List),
     <<55, (byte_size(Bin)), Bin/binary>>;
-encode_option({max_message_size, Size}) when
+encode_option(max_message_size, Size) when
     Size >= 16#0000, Size =< 16#FFFF
 ->
     Len = 2,
     <<57, Len, Size:16>>;
-encode_option({vendor_class_id, Bin}) ->
+encode_option(vendor_class_id, Bin) ->
     <<60, (byte_size(Bin)), Bin/binary>>;
-encode_option({client_id, ClientId}) ->
+encode_option(client_id, ClientId) ->
     Bin = encode_client_id(ClientId),
     Len = byte_size(Bin),
     <<61, Len, Bin/binary>>;
-encode_option({client_system, Arch}) ->
+encode_option(client_system, Arch) ->
     <<93, 2, (encode_arch(Arch)):16>>;
-encode_option({client_ndi, {T, Maj, Min}}) ->
+encode_option(client_ndi, {T, Maj, Min}) ->
     <<94, 3, T, Maj, Min>>;
-encode_option({user_class, Bin}) ->
+encode_option(user_class, Bin) ->
     <<77, (byte_size(Bin)), Bin/binary>>;
-encode_option({client_uuid, GUID}) ->
+encode_option(client_uuid, GUID) ->
     <<97, 17, 0, GUID:16/binary>>;
-encode_option({vivso, Vivso}) ->
-    Bin = encode_vivso_list(Vivso),
+encode_option(vivso, Bin) ->
     <<125, (byte_size(Bin)), Bin/binary>>;
-encode_option({ipxe_encap, SubOpts}) ->
+encode_option(ipxe_encap, SubOpts) ->
     Bin = encode_ipxe_suboption_list(SubOpts),
     <<175, (byte_size(Bin)), Bin/binary>>.
 
@@ -457,6 +485,15 @@ encode_msgtype(dhcpactiveleasequery) -> 16;
 encode_msgtype(dhcpleasequerystatus) -> 17;
 encode_msgtype(dhcptls) -> 18.
 
+encode_parameter_list(List) ->
+	F = fun(N, Acc) when N >= 0, N =< 255 ->
+				[ N | Acc ]
+		end,
+	List1 = lists:foldl(F, [], List),
+	List2 = lists:reverse(List1),
+	list_to_binary(List2).
+	
+
 -doc """
 Per https://www.rfc-editor.org/rfc/rfc2132#section-9.14 This MAY contain
 hardware addresses, but doesn't necessitate them. In such cases, the client ID
@@ -476,26 +513,18 @@ encode_client_id({non_hardware, Id}) ->
     <<16#00, Id/binary>>;
 encode_client_id({ethernet, Mac}) ->
     Bin = encode_mac(Mac),
-    <<16#01, Bin/binary>>;
+    Test = <<16#01, Bin/binary>>,
+	io:format("Post: ~p~n", [Bin]),
+	Test;
 encode_client_id({infiniband, Mac}) ->
     Bin = encode_ib_mac(Mac),
     <<16#20, Bin/binary>>.
-
-decode_vivso_list(Bin) ->
-    % TODO
-    Bin.
-
-encode_vivso_list(_) ->
-    % TODO
-    <<>>.
 
 decode_ipxe_suboption_list(Bin) ->
     decode_tlv(Bin, fun decode_ipxe_suboption/2).
 
 encode_ipxe_suboption_list(TupleList) ->
-    % encode_tlv(TupleList, fun encode_ipxe_suboption/2).
-    % TODO
-    <<>>.
+    encode_tlv(TupleList, fun encode_ipxe_suboption/2).
 
 % https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture
 decode_arch(16#0000) ->
@@ -671,22 +700,37 @@ encode_arch(loongarch_64_uefi_http) ->
 encode_arch(arm_rpiboot) ->
     16#0029.
 
-%% 177 bus_id
 decode_ipxe_suboption(16#b1, <<Type, Vendor:16, Device:16>>) ->
     {bus_id, {Type, Vendor, Device}};
-%% 235 version
 decode_ipxe_suboption(16#eb, <<Maj, Min, _/binary>>) ->
     {version, {Maj, Min}};
-%% 189 san_drive (BIOS drive no.)
-decode_ipxe_suboption(16#bd, <<Drive>>) ->
-    {san_drive, Drive};
 %% Boolean treatment ONLY for the feature-marker range 0x10-0x4f.
 decode_ipxe_suboption(Tag, <<1>>) when Tag >= 16#10, Tag =< 16#4f ->
     {decode_ipxe_feature(Tag), true};
 decode_ipxe_suboption(Tag, <<0>>) when Tag >= 16#10, Tag =< 16#4f ->
     {decode_ipxe_feature(Tag), false};
-decode_ipxe_suboption(Tag, Value) ->
+decode_ipxe_suboption(Tag, <<Value>>) ->
     {decode_ipxe_feature(Tag), Value}.
+
+encode_ipxe_suboption(bus_id, {Type, Vendor, Device}) ->
+	VenBin = encode_uint16(Vendor),
+	DevBin = encode_uint16(Device),
+	<< 16#B1, Type, VenBin/binary, DevBin/binary >>;
+encode_ipxe_suboption(version, {Maj, Min}) ->
+	MajBin = encode_uint8(Maj),
+	MinBin = encode_uint8(Min),
+	<< 16#EB, MajBin/binary, MinBin/binary >>;
+encode_ipxe_suboption(Tag, true) ->
+	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+	<< TagBin/binary, 1 >>;
+encode_ipxe_suboption(Tag, false) ->
+	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+	<< TagBin/binary, 0 >>;
+encode_ipxe_suboption(Tag, Value) ->
+	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+	ValBin = encode_uint8(Value),
+	<< TagBin/binary, ValBin/binary >>.
+	
 
 decode_ipxe_feature(16#10) -> pxe_ext;
 decode_ipxe_feature(16#11) -> iscsi;
@@ -711,3 +755,26 @@ decode_ipxe_feature(16#27) -> menu;
 decode_ipxe_feature(16#28) -> sdi;
 decode_ipxe_feature(16#29) -> nfs;
 decode_ipxe_feature(N) -> N.
+
+encode_ipxe_feature(pxe_ext) -> 16#10;
+encode_ipxe_feature(iscsi) -> 16#11;
+encode_ipxe_feature(aoe) -> 16#12;
+encode_ipxe_feature(http) -> 16#13;
+encode_ipxe_feature(https) -> 16#14;
+encode_ipxe_feature(tftp) -> 16#15;
+encode_ipxe_feature(ftp) -> 16#16;
+encode_ipxe_feature(dns) -> 16#17;
+encode_ipxe_feature(bzimage) -> 16#18;
+encode_ipxe_feature(multiboot) -> 16#19;
+encode_ipxe_feature(slam) -> 16#1a;
+encode_ipxe_feature(srp) -> 16#1b;
+encode_ipxe_feature(nbi) -> 16#20;
+encode_ipxe_feature(pxe) -> 16#21;
+encode_ipxe_feature(elf) -> 16#22;
+encode_ipxe_feature(comboot) -> 16#23;
+encode_ipxe_feature(efi) -> 16#24;
+encode_ipxe_feature(fcoe) -> 16#25;
+encode_ipxe_feature(vlan) -> 16#26;
+encode_ipxe_feature(menu) -> 16#27;
+encode_ipxe_feature(sdi) -> 16#28;
+encode_ipxe_feature(nfs) -> 16#29.
