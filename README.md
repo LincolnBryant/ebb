@@ -1,5 +1,6 @@
-ebb - Erly Boot & Build
+erly boot & build (ebb)
 -----------------------
 
-PXE boot in style.
-
+An experimental substrate for server provisioning and lifecycle management. A
+single application that controls the full node lifecycle: Build, provision,
+monitor, and triage. Payload agnostic, commoditizing the hyperscaler moat.
