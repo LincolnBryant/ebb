@@ -1,12 +1,11 @@
 -module(ebb_dhcp_packet).
 -moduledoc "Handles DHCP packets".
 
--export([decode/1]).
--export([encode/1]).
-%-export([
-%		]).
--export([decode_part/1]).
--export([encode_part/1]).
+-export([decode/1, encode/1]).
+% Test funs ..
+% -export([decode_part/1]).
+% -export([encode_part/1]).
+%
 
 -include("dhcp.hrl").
 
@@ -40,33 +39,66 @@ decode(
         options = decode_option_list(OptRaw)
     }.
 
-decode_part(
-    <<Op:8, HType:8, HLen:8, Hops:8, Xid:32, Secs:16, Flags:2/binary,
-        CiAddr:4/binary, YiAddr:4/binary, SiAddr:4/binary, GiAddr:4/binary,
-        ChAddr:16/binary, SName:64/binary, File:128/binary, ?DHCP_MAGIC_COOKIE:32,
-        OptRaw/binary>>
-) ->
-	[Op, HType, HLen, Hops, Xid, Secs, Flags, CiAddr, YiAddr, SiAddr, GiAddr, ChAddr, SName, File, OptRaw].
-
-encode_part(#dhcp_message{
-    op = Op,
-    htype = HType,
-    hlen = HLen,
-    hops = Hops,
-    xid = Xid,
-    secs = Secs,
-    flags = Flags,
-    ciaddr = CiAddr,
-    yiaddr = YiAddr,
-    siaddr = SiAddr,
-    giaddr = GiAddr,
-    chaddr = ChAddr,
-    sname = SName,
-    file = File,
-    options = Options
-}) ->
-	[Op, HType, HLen, Hops, Xid, Secs, Flags, CiAddr, YiAddr, SiAddr, GiAddr, ChAddr, SName, File, Options].
-
+% Commented for testing
+%decode_part(
+%    <<Op:8, HType:8, HLen:8, Hops:8, Xid:32, Secs:16, Flags:2/binary,
+%        CiAddr:4/binary, YiAddr:4/binary, SiAddr:4/binary, GiAddr:4/binary,
+%        ChAddr:16/binary, SName:64/binary, File:128/binary, ?DHCP_MAGIC_COOKIE:32,
+%        OptRaw/binary>>
+%) ->
+%    [
+%        Op,
+%        HType,
+%        HLen,
+%        Hops,
+%        Xid,
+%        Secs,
+%        Flags,
+%        CiAddr,
+%        YiAddr,
+%        SiAddr,
+%        GiAddr,
+%        ChAddr,
+%        SName,
+%        File,
+%        OptRaw
+%    ].
+%
+%encode_part(#dhcp_message{
+%    op = Op,
+%    htype = HType,
+%    hlen = HLen,
+%    hops = Hops,
+%    xid = Xid,
+%    secs = Secs,
+%    flags = Flags,
+%    ciaddr = CiAddr,
+%    yiaddr = YiAddr,
+%    siaddr = SiAddr,
+%    giaddr = GiAddr,
+%    chaddr = ChAddr,
+%    sname = SName,
+%    file = File,
+%    options = Options
+%}) ->
+%    [
+%        Op,
+%        HType,
+%        HLen,
+%        Hops,
+%        Xid,
+%        Secs,
+%        Flags,
+%        CiAddr,
+%        YiAddr,
+%        SiAddr,
+%        GiAddr,
+%        ChAddr,
+%        SName,
+%        File,
+%        Options
+%    ].
+%
 -doc """
 Encodes a #dhcp_message{} record into a DHCP packet. Fields are serialized per
 RFC 2131, section 2: https://datatracker.ietf.org/doc/html/rfc2131#section-2
@@ -100,7 +132,8 @@ encode(#dhcp_message{
     YiAddrBin = encode_ip(YiAddr),
     SiAddrBin = encode_ip(SiAddr),
     GiAddrBin = encode_ip(GiAddr),
-    ChAddrBin = << (encode_mac(ChAddr))/binary, 0:80 >>, % 10 bytes of padding
+    % 10 bytes of padding
+    ChAddrBin = <<(encode_mac(ChAddr))/binary, 0:80>>,
     SNameBin = encode_padded_string(SName, 64),
     FileBin = encode_padded_string(File, 128),
     OptionsBin = encode_option_list(Options),
@@ -327,7 +360,7 @@ encode_tlv(TupleList, EncodeFun) ->
     encode_tlv(TupleList, EncodeFun, []).
 
 encode_tlv([], _F, Acc) ->
-    << (list_to_binary(Acc))/binary, 255 >>;
+    <<(list_to_binary(Acc))/binary, 255>>;
 encode_tlv([{Tag, Value} | Rest], F, Acc) ->
     encode_tlv(Rest, F, [F(Tag, Value) | Acc]).
 
@@ -356,7 +389,7 @@ decode_option(57, <<Size:16>>) ->
 decode_option(60, Bin) ->
     {vendor_class_id, Bin};
 decode_option(61, Bin) ->
-	io:format("Pre: ~p~n", [Bin]),
+    io:format("Pre: ~p~n", [Bin]),
     {client_id, decode_client_id(Bin)};
 decode_option(93, <<Arch:16>>) ->
     {client_system, decode_arch(Arch)};
@@ -486,13 +519,12 @@ encode_msgtype(dhcpleasequerystatus) -> 17;
 encode_msgtype(dhcptls) -> 18.
 
 encode_parameter_list(List) ->
-	F = fun(N, Acc) when N >= 0, N =< 255 ->
-				[ N | Acc ]
-		end,
-	List1 = lists:foldl(F, [], List),
-	List2 = lists:reverse(List1),
-	list_to_binary(List2).
-	
+    F = fun(N, Acc) when N >= 0, N =< 255 ->
+        [N | Acc]
+    end,
+    List1 = lists:foldl(F, [], List),
+    List2 = lists:reverse(List1),
+    list_to_binary(List2).
 
 -doc """
 Per https://www.rfc-editor.org/rfc/rfc2132#section-9.14 This MAY contain
@@ -514,8 +546,8 @@ encode_client_id({non_hardware, Id}) ->
 encode_client_id({ethernet, Mac}) ->
     Bin = encode_mac(Mac),
     Test = <<16#01, Bin/binary>>,
-	io:format("Post: ~p~n", [Bin]),
-	Test;
+    io:format("Post: ~p~n", [Bin]),
+    Test;
 encode_client_id({infiniband, Mac}) ->
     Bin = encode_ib_mac(Mac),
     <<16#20, Bin/binary>>.
@@ -713,24 +745,23 @@ decode_ipxe_suboption(Tag, <<Value>>) ->
     {decode_ipxe_feature(Tag), Value}.
 
 encode_ipxe_suboption(bus_id, {Type, Vendor, Device}) ->
-	VenBin = encode_uint16(Vendor),
-	DevBin = encode_uint16(Device),
-	<< 16#B1, Type, VenBin/binary, DevBin/binary >>;
+    VenBin = encode_uint16(Vendor),
+    DevBin = encode_uint16(Device),
+    <<16#B1, Type, VenBin/binary, DevBin/binary>>;
 encode_ipxe_suboption(version, {Maj, Min}) ->
-	MajBin = encode_uint8(Maj),
-	MinBin = encode_uint8(Min),
-	<< 16#EB, MajBin/binary, MinBin/binary >>;
+    MajBin = encode_uint8(Maj),
+    MinBin = encode_uint8(Min),
+    <<16#EB, MajBin/binary, MinBin/binary>>;
 encode_ipxe_suboption(Tag, true) ->
-	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
-	<< TagBin/binary, 1 >>;
+    TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+    <<TagBin/binary, 1>>;
 encode_ipxe_suboption(Tag, false) ->
-	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
-	<< TagBin/binary, 0 >>;
+    TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+    <<TagBin/binary, 0>>;
 encode_ipxe_suboption(Tag, Value) ->
-	TagBin = encode_uint8(encode_ipxe_feature(Tag)),
-	ValBin = encode_uint8(Value),
-	<< TagBin/binary, ValBin/binary >>.
-	
+    TagBin = encode_uint8(encode_ipxe_feature(Tag)),
+    ValBin = encode_uint8(Value),
+    <<TagBin/binary, ValBin/binary>>.
 
 decode_ipxe_feature(16#10) -> pxe_ext;
 decode_ipxe_feature(16#11) -> iscsi;

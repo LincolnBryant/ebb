@@ -27,12 +27,8 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({udp, Socket, Addr, Port, Packet}, State) ->
-    case decode(Packet) of
-        {ok, Msg} ->
-            ebb_dhcpd:handle_request(Addr, Port, Msg);
-        {error, _} ->
-            ok
-    end,
+	{ok, Msg} = decode(Packet),
+    ebb_dhcpd:handle_request(Addr, Port, Msg),
     inet:setopts(Socket, [{active, once}]),
     {noreply, State}.
 
