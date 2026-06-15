@@ -1,7 +1,7 @@
 -module(ebb_dhcp_table).
 -behaviour(gen_server).
 
--include("dhcp.hrl")
+-include("dhcp.hrl").
 
 %% API
 -export([
@@ -27,9 +27,9 @@ treated as an opaque object, as clients may send:
 	- UUID (Option 97)
 	- Arbitrary string identifier OR MAC Address (Option 61)
 	- MAC Address (ChAddr)
-"""
--spec get_or_create(mac_address() | bytes()) ->
-get_or_create(Identifier) ->
+""".
+-spec get_or_create(mac_address() | binary()) -> ok.
+get_or_create(_Identifier) ->
 	ok.
 
 init([]) ->
@@ -41,8 +41,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({expire, ID}, State) ->
-	ok;
+handle_info({expire, _ID}, State) ->
+	{ok, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 

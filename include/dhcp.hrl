@@ -1,5 +1,9 @@
 -define(DHCP_MAGIC_COOKIE, 16#63825363).
 
+-define(DEFAULT_LEASE_SECONDS, 3600).
+-define(MAX_LEASE_SECONDS, 86400).
+-define(MIN_LEASE_SECONDS, 300).
+
 -record(dhcp_message, {
     % Header
     op :: op(),
