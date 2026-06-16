@@ -122,13 +122,15 @@ handle_info({expire, ID}, #{table := Table} = State) ->
     S = Lease#dhcp_lease.state,
     case S of
         offered ->
-            logger:notice("Offer timed out for ~p", [ID]);
+            logger:notice("Offer timed out for ~p", [ID]),
+			Table1 = lists:keydelete(ID, #dhcp_lease.client_id, Table),
+			{noreply, State#{table => Table1}};
         _ ->
-            logger:notice("Expiring lease for ~p", [ID])
-    end,
-    ExpiredLease = Lease#dhcp_lease{state = expired, expiration = undefined},
-    Table1 = lists:keyreplace(ID, #dhcp_lease.client_id, Table, ExpiredLease),
-    {noreply, State#{table => Table1}};
+            logger:notice("Expiring lease for ~p", [ID]),
+			ExpiredLease = Lease#dhcp_lease{state = expired, expiration = undefined},
+			Table1 = lists:keyreplace(ID, #dhcp_lease.client_id, Table, ExpiredLease),
+			{noreply, State#{table => Table1}}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
