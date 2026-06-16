@@ -51,7 +51,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 route(#dhcp_message{op = bootrequest} = DHCPMsg, Leases) ->
-    {Reply, NewLeases} = maybe_lease(DHCPMsg, Leases),
+    {_Reply, NewLeases} = maybe_lease(DHCPMsg, Leases),
     % TODO send reply
     NewLeases;
 route(_, Leases) ->
@@ -61,18 +61,15 @@ route(_, Leases) ->
 maybe_lease(Msg, LeaseTable) ->
     Options = Msg#dhcp_message.options,
     MacAddr = Msg#dhcp_message.chaddr,
-    MsgType = proplists:get_val(message_type),
+    MsgType = proplists:get_value(message_type, Options),
     case MsgType of
         dhcpdiscover ->
-            Lease = create_or_return_lease(MacAddr),
-            {todo, LeaseTable};
+            Lease = ebb_dhcp_table_mem:get_or_create(MacAddr),
+            {Lease, LeaseTable};
         _ ->
             logger:debug("Not implemented"),
             {undefined, LeaseTable}
     end.
-
-create_or_return_lease(MacAddr) ->
-    ok.
 
 %% This all needs to be redone.
 %% Lease table should be a separate process and we send mesages to it.
