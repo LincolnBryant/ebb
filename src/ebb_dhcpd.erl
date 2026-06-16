@@ -39,10 +39,47 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({udp, Socket, _Addr, _Port, Packet}, #{lease := Leases} = State) ->
-    NewLeases = route(ebb_dhcp_packet:decode(Packet), Leases),
+%                    ┌────────────────┐
+%       power on ──► │     INIT       │ ◄── NAK / lease expired / DECLINE / RELEASE
+%                    └───────┬────────┘
+%                            │ DHCPDISCOVER
+%                            ▼
+%                    ┌────────────────┐
+%                    │   SELECTING    │
+%                    └───────┬────────┘
+%                            │ DHCPREQUEST (broadcast)
+%                            ▼
+%                    ┌────────────────┐
+%                    │   REQUESTING   │──── NAK ───────► (restart)
+%                    └───────┬────────┘               
+%                            │ ACK                    
+%                            ▼                        
+%                     ┌──────────────┐    
+%                     │    BOUND     │
+%                     └──────┬───────┘
+%                            │ T1
+%                            ▼
+%                     ┌──────────────┐
+%       ACK ◄──────── │   RENEWING   │
+%     (BOUND)         └──────┬───────┘
+%                            │ T2
+%                            ▼
+%                     ┌──────────────┐
+%       ACK ◄──────── │  REBINDING   │
+%     (BOUND)         └──────┬───────┘
+%                            │ lease expires
+%                            ▼
+%                          INIT
+
+handle_info({udp, Socket, _Addr, _Port, Packet}, State) ->
+	% Rearm the socket for another message
     inet:setopts(Socket, [{active, once}]),
-    {noreply, State#{leases => NewLeases}}.
+	Msg = ebb_dhcp_packet:decode(Packet),
+	% Consume the packet and send a reply as a side effect, as necessary
+	route_msg(Msg, Socket),
+	{noreply, State};
+handle_info(_Msg, State) ->
+    {noreply, State}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -50,26 +87,81 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-route(#dhcp_message{op = bootrequest} = DHCPMsg, Leases) ->
-    {_Reply, NewLeases} = maybe_lease(DHCPMsg, Leases),
-    % TODO send reply
-    NewLeases;
-route(_, Leases) ->
-    logger:debug("Not implemented: Won't handle bootreply messages"),
-    Leases.
+route_msg(Msg = #dhcp_message{ op = bootrequest, options = Options }, Socket) ->
+	MsgType = proplists:get_value(message_type, Options),
+	case MsgType of 
+		dhcpdiscover -> 
+			Offer = ebb_dhcp_table_mem:create_offer(Msg),
+			send_offer(Msg, Offer, Socket);
+		dhcprequest -> 
+			ebb_dhcp_table_mem:accept_offer(Msg, Socket);
+		_ -> 
+			ok
+	end;
+route_msg(_Msg, _) -> 
+	logger:debug("Discarding non-implemented message type").
 
-maybe_lease(Msg, LeaseTable) ->
-    Options = Msg#dhcp_message.options,
-    MacAddr = Msg#dhcp_message.chaddr,
-    MsgType = proplists:get_value(message_type, Options),
-    case MsgType of
-        dhcpdiscover ->
-            Lease = ebb_dhcp_table_mem:get_or_create(MacAddr),
-            {Lease, LeaseTable};
-        _ ->
-            logger:debug("Not implemented"),
-            {undefined, LeaseTable}
-    end.
+send_offer(DiscoverMsg, Offer, Socket) ->
+	% Retrieve fields from the original message
+	#dhcp_message{
+	  xid = Xid,
+	  chaddr = ChAddr,
+	  giaddr = GiAddr,
+	  htype = HType,
+	  hlen = HLen
+	} = DiscoverMsg,
+	% Pull the client IP out of the offer
+	#dhcp_lease{
+	   ip = ClientIP,
+	   duration = Duration
+	} = Offer,
+	% Grab the server IP from the socket
+	{ok, {ServerIP, _Port}} = inet:sockname(Socket),
+	% Create the options list
+	Options = [
+			   {1, 12},
+			   {51, Duration},
+			   {53, dhcpoffer},
+			   {54, ServerIP}
+			  ],
+	OfferMsg = #dhcp_message{
+				  op = bootreply,
+				  htype = HType,
+				  hlen = HLen,
+				  hops = 0,
+				  xid = Xid,
+				  secs = 0,
+				  flags = [broadcast],
+
+				  ciaddr = 0,
+				  yiaddr = ClientIP,
+				  siaddr = ServerIP,
+				  giaddr = GiAddr,
+				  chaddr = ChAddr,
+
+				  sname = <<>>,
+				  file = <<>>,
+
+				  options = Options
+				},
+	logger:notice("Created message: ~p", [OfferMsg]),
+	OfferPacket = ebb_dhcp_packet:encode(OfferMsg),
+	logger:notice("Encoded message: ~p", [OfferPacket]),
+	% TODO : Remove broadcast flast, unicast directly to the MAC
+	gen_udp:send(Socket, {255,255,255,255}, 68, OfferPacket).
+
+%maybe_lease(Msg, LeaseTable) ->
+%    Options = Msg#dhcp_message.options,
+%    MacAddr = Msg#dhcp_message.chaddr,
+%    MsgType = proplists:get_value(message_type, Options),
+%    case MsgType of
+%        dhcpdiscover ->
+%            Lease = ebb_dhcp_table_mem:get_or_create(MacAddr),
+%            {Lease, LeaseTable};
+%        _ ->
+%            logger:debug("Not implemented"),
+%            {undefined, LeaseTable}
+%    end.
 
 %% This all needs to be redone.
 %% Lease table should be a separate process and we send mesages to it.
