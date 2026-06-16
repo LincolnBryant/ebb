@@ -36,12 +36,13 @@
 -type dhcp_message() :: #dhcp_message{}.
 
 -record(dhcp_lease, {
-          ip :: inet:ip4_address() | undefined,
-          client_id :: client_id(),
-		  state :: lease_state(),
-		  duration :: non_neg_integer(),
-          expiration :: reference()
-         }).
+    ip :: inet:ip4_address(),
+    subnet_mask :: inet:ip4_address(),
+    client_id :: client_id(),
+    state :: lease_state(),
+    duration :: non_neg_integer(),
+    expiration :: reference()
+}).
 -type dhcp_lease() :: #dhcp_lease{}.
 -type client_id() :: binary() | mac_address() | udnefined.
 -type lease_state() :: offered | active | expired | released | declined.
