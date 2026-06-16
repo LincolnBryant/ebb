@@ -1,8 +1,13 @@
 -define(DHCP_MAGIC_COOKIE, 16#63825363).
 
 -define(DEFAULT_LEASE_SECONDS, 3600).
--define(MAX_LEASE_SECONDS, 86400).
--define(MIN_LEASE_SECONDS, 300).
+% TODO
+%-define(MAX_LEASE_SECONDS, 86400).
+%-define(MIN_LEASE_SECONDS, 300).
+
+-define(DEFAULT_OFFER_TIMEOUT_SECONDS, 300).
+
+-define(DEFAULT_CIDR_RANGE, "172.16.0.0/16").
 
 -record(dhcp_message, {
     % Header
@@ -29,6 +34,18 @@
     options :: [dhcp_option()]
 }).
 -type dhcp_message() :: #dhcp_message{}.
+
+-record(dhcp_lease, {
+          ip :: inet:ip4_address() | undefined,
+          client_id :: client_id(),
+		  state :: lease_state(),
+		  duration :: non_neg_integer(),
+          expiration :: reference()
+         }).
+-type dhcp_lease() :: #dhcp_lease{}.
+-type client_id() :: binary() | mac_address() | udnefined.
+-type lease_state() :: offered | active | expired | released | declined.
+-type ip4_cidr() :: string().
 
 -type op() :: bootrequest | bootreply.
 -type mac_address() :: {byte(), byte(), byte(), byte(), byte(), byte()}.
