@@ -28,10 +28,21 @@ start_link() ->
 init([]) ->
     SupFlags = #{
         strategy => one_for_all,
-        intensity => 0,
-        period => 1
+        intensity => 3,
+        period => 5
     },
-    ChildSpecs = [],
+    ChildSpecs = [
+        #{
+            id => ebb_dhcp_pool_mem,
+            start => {ebb_dhcp_pool_mem, start_link, []},
+            type => worker
+        },
+        #{
+            id => ebb_dhcpd,
+            start => {ebb_dhcpd, start_link, []},
+            type => worker
+        }
+    ],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
