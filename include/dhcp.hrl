@@ -115,8 +115,4 @@
     | hfi
     | unified_bus
     | 0..255.
-
--type dhcp_option() ::
-    {Tag :: 0..254, Value :: binary()}
-    %% end option
-    | {Tag :: 255}.
+-type dhcp_option() :: {atom(), term()}.
