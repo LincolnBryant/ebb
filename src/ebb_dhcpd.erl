@@ -91,20 +91,30 @@ code_change(_OldVsn, State, _Extra) ->
 
 route_msg(Msg = #dhcp_message{op = bootrequest, options = Options}, Socket) ->
     MsgType = proplists:get_value(message_type, Options),
+    logger:notice("DHCP ~p from ~p (xid=~.16B)", [
+        MsgType, Msg#dhcp_message.chaddr, Msg#dhcp_message.xid
+    ]),
     case MsgType of
         dhcpdiscover ->
             OfferLease =
                 case ebb_dhcp_pool_mem:get_offer(Msg) of
-                    false ->
-                        ebb_dhcp_pool_mem:create_offer(Msg);
-                    Existing ->
-                        Existing
+                    {error, no_such_offer} ->
+                        {ok, NewLease} = ebb_dhcp_pool_mem:create_offer(Msg),
+                        NewLease;
+                    {ok, ExistingLease} ->
+                        ExistingLease
                 end,
             send_offer(Msg, OfferLease, Socket);
         dhcprequest ->
-            ok;
-        % TODO:
-        %ebb_dhcp_pool_mem:accept_offer(Msg, Socket);
+            case ebb_dhcp_pool_mem:accept_offer(Msg) of
+                {error, Reason} ->
+                    logger:notice("NAK reason: ~p, pool: ~p", [
+                        Reason, ebb_dhcp_pool_mem:dump()
+                    ]),
+                    send_nak(Msg, Socket);
+                {ok, Lease} ->
+                    send_ack(Msg, Lease, Socket)
+            end;
         _ ->
             % TODO: Handle other message types
             ok
@@ -127,8 +137,7 @@ send_offer(DiscoverMsg, Offer, Socket) ->
         subnet_mask = SubnetMask,
         duration = Duration
     } = Offer,
-    % Grab the server IP from the socket
-    {ok, {ServerIP, _Port}} = inet:sockname(Socket),
+    ServerIP = server_ip(Socket),
     % Create the options list
     Options = [
         {subnet_mask, SubnetMask},
@@ -156,26 +165,115 @@ send_offer(DiscoverMsg, Offer, Socket) ->
 
         options = Options
     },
-    logger:notice("Created message: ~p", [OfferMsg]),
+	% TODO: Change this to a unicast to the MAC 
+    logger:notice("Sending OFFER ~p to ~p", [ClientIP, ChAddr]),
     OfferPacket = ebb_dhcp_packet:encode(OfferMsg),
-    logger:notice("Encoded message: ~p", [OfferPacket]),
-    % TODO : Remove broadcast flast, unicast directly to the MAC
-    gen_udp:send(Socket, {255, 255, 255, 255}, 68, OfferPacket).
+    send_broadcast(Socket, OfferPacket).
 
-%maybe_lease(Msg, LeaseTable) ->
-%    Options = Msg#dhcp_message.options,
-%    MacAddr = Msg#dhcp_message.chaddr,
-%    MsgType = proplists:get_value(message_type, Options),
-%    case MsgType of
-%        dhcpdiscover ->
-%            Lease = ebb_dhcp_pool_mem:get_or_create(MacAddr),
-%            {Lease, LeaseTable};
-%        _ ->
-%            logger:debug("Not implemented"),
-%            {undefined, LeaseTable}
-%    end.
+send_ack(RequestMsg, Lease, Socket) ->
+    #dhcp_message{
+        xid = Xid,
+        chaddr = ChAddr,
+        giaddr = GiAddr,
+        htype = HType,
+        hlen = HLen
+    } = RequestMsg,
+    #dhcp_lease{
+        ip = ClientIP,
+        subnet_mask = SubnetMask,
+        duration = Duration
+    } = Lease,
+    ServerIP = server_ip(Socket),
+    Options = [
+        {subnet_mask, SubnetMask},
+        {lease_time, Duration},
+        {message_type, dhcpack},
+        {server_id, ServerIP}
+    ],
+    AckMsg = #dhcp_message{
+        op = bootreply,
+        htype = HType,
+        hlen = HLen,
+        hops = 0,
+        xid = Xid,
+        secs = 0,
+        flags = [broadcast],
+        ciaddr = {0, 0, 0, 0},
+        yiaddr = ClientIP,
+        siaddr = ServerIP,
+        giaddr = GiAddr,
+        chaddr = ChAddr,
+        sname = <<>>,
+        file = <<>>,
+        options = Options
+    },
+    logger:notice("Sending ACK ~p to ~p", [ClientIP, ChAddr]),
+    AckPacket = ebb_dhcp_packet:encode(AckMsg),
+    send_broadcast(Socket, AckPacket).
 
-%% This all needs to be redone.
-%% Lease table should be a separate process and we send mesages to it.
-%% We need to determine all of the terminating states for when a reply is sent
-%% Thread through stuff correctly.
+send_nak(RequestMsg, Socket) ->
+    #dhcp_message{
+        xid = Xid,
+        chaddr = ChAddr,
+        giaddr = GiAddr,
+        htype = HType,
+        hlen = HLen
+    } = RequestMsg,
+    ServerIP = server_ip(Socket),
+    Options = [
+        {message_type, dhcpnak},
+        {server_id, ServerIP}
+    ],
+    NakMsg = #dhcp_message{
+        op = bootreply,
+        htype = HType,
+        hlen = HLen,
+        hops = 0,
+        xid = Xid,
+        secs = 0,
+        flags = [broadcast],
+        ciaddr = {0, 0, 0, 0},
+        yiaddr = {0, 0, 0, 0},
+        siaddr = ServerIP,
+        giaddr = GiAddr,
+        chaddr = ChAddr,
+        sname = <<>>,
+        file = <<>>,
+        options = Options
+    },
+    logger:notice("Sending NAK to ~p", [ChAddr]),
+    NakPacket = ebb_dhcp_packet:encode(NakMsg),
+    send_broadcast(Socket, NakPacket).
+
+server_ip(Socket) ->
+    case inet:sockname(Socket) of
+        {ok, {{0, 0, 0, 0}, _}} ->
+            guess_server_ip();
+        {ok, {IP, _}} ->
+            IP
+    end.
+
+guess_server_ip() ->
+    Cidr = inet_cidr:parse(?DEFAULT_CIDR_RANGE),
+    {Start, _End, _Prefix} = Cidr,
+    {ok, Addrs} = inet:getifaddrs(),
+    case
+        [
+            IP
+         || {_If, Opts} <- Addrs,
+            {addr, IP} <- Opts,
+            tuple_size(IP) =:= tuple_size(Start),
+            inet_cidr:contains(Cidr, IP)
+        ]
+    of
+        [First | _] -> First;
+        [] -> Start
+    end.
+
+send_broadcast(Socket, Packet) ->
+    Bcast = subnet_broadcast(),
+    gen_udp:send(Socket, Bcast, 68, Packet).
+
+subnet_broadcast() ->
+    {_Start, End, _Prefix} = inet_cidr:parse(?DEFAULT_CIDR_RANGE),
+    End.
