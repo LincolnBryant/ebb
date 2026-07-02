@@ -1,9 +1,9 @@
 -module(ebb_dhcp_pool_mem).
-%%-doc """
-%%This module stores DHCP leases strictly in memory. It does not write them out to disk.
-%%
-%%It should be used only for demo purposes.
-%%""".
+-moduledoc """
+This module stores DHCP leases strictly in memory. It does not write them out to disk.
+
+It should be used only for demo purposes.
+""".
 -behaviour(gen_server).
 
 %% TODO:
@@ -21,6 +21,7 @@
     start_link/0,
     get_offer/1,
     create_offer/1,
+    accept_offer/1,
     dump/0
 ]).
 
@@ -29,28 +30,30 @@
     init/1,
     handle_call/3,
     handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    handle_info/2
 ]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec get_offer(dhcp_message()) -> {ok, inet:ip4_address()}.
+-spec get_offer(dhcp_message()) -> {ok, dhcp_lease()} | {error, term()}.
 get_offer(Msg) ->
     gen_server:call(?MODULE, {get_offer, Msg}).
 
-%-doc """
-%Retrieve/extend an existing DHCP lease, or create a new one. Identifier is
-%treated as an opaque object, as clients may send:
-%	- UUID (Option 97)
-%	- Arbitrary string identifier OR MAC Address (Option 61)
-%	- MAC Address (ChAddr)
-%""".
--spec create_offer(dhcp_message()) -> {ok, inet:ip4_address()}.
+-doc """
+Retrieve/extend an existing DHCP lease, or create a new one. Identifier is
+treated as an opaque object, as clients may send:
+   - UUID (Option 97)
+   - Arbitrary string identifier OR MAC Address (Option 61)
+   - MAC Address (ChAddr)
+""".
+-spec create_offer(dhcp_message()) -> {ok, dhcp_lease()} | {error, term()}.
 create_offer(Msg) ->
     gen_server:call(?MODULE, {create_offer, Msg}).
+
+-spec accept_offer(dhcp_message()) -> {ok, dhcp_lease()} | {error, term()}.
+accept_offer(Msg) ->
+    gen_server:call(?MODULE, {accept_offer, Msg}).
 
 dump() ->
     gen_server:call(?MODULE, dump).
@@ -65,17 +68,19 @@ init([]) ->
 handle_call({get_offer, Msg}, _From, #{pool := Pool} = State) ->
     ClientID = Msg#dhcp_message.chaddr,
     Result = lists:keyfind(ClientID, #dhcp_lease.client_id, Pool),
-    {reply, Result, State};
+    {reply, {ok, Result}, State};
 handle_call({create_offer, Msg}, _From, State) ->
     #{pool := Pool, range := Range} = State,
     ClientID = Msg#dhcp_message.chaddr,
     Options = Msg#dhcp_message.options,
     LeaseDuration =
         case proplists:get_value(lease_time, Options, false) of
-            false ->
-                ?DEFAULT_LEASE_SECONDS;
-            Value ->
-                Value
+            Value when is_integer(Value) ->
+                % Ensure that we're getting an integer from the client message,
+                % otherwise give them the default
+                Value;
+            _ ->
+                ?DEFAULT_LEASE_SECONDS
         end,
     % See next_ip/2 deficiencies
     {ok, ClientIP} = next_ip(Pool, Range),
@@ -89,81 +94,58 @@ handle_call({create_offer, Msg}, _From, State) ->
         ),
         duration = LeaseDuration
     },
-    {reply, Lease, State#{pool => [Lease | Pool]}};
-%handle_call({create_offer, DHCPMsg}, _From, State) ->
-%    #{pool := Pool, range := Range} = State,
-%    {NewLease, NewPool} =
-%        case lists:keyfind(Identifier, #dhcp_lease.client_id, Pool) of
-%            false ->
-%                {Lease, Pool1} = create_lease(
-%                    Identifier, LeaseDuration, Range, Pool
-%                ),
-%                {Lease, Pool1};
-%            Lease ->
-%                % TODO: Maybe this needs to be handled elsewhere. We need to
-%                % pass forward the ACK for a DHCP offer, for instance
-%                {L, T} =
-%                    case Lease#dhcp_lease.state of
-%                        active ->
-%                            % Renew the timer
-%                            ExpireTimer = Lease#dhcp_lease.expiration,
-%                            erlang:cancel_timer(ExpireTimer),
-%                            Lease1 = Lease#dhcp_lease{expiration = LeaseDuration},
-%                            Pool1 = lists:keyreplace(
-%                                Identifier, #dhcp_lease.client_id, Pool, Lease1
-%                            ),
-%                            {Lease1, Pool1};
-%                        expired ->
-%                            % Re-activate
-%                            Lease1 = Lease#dhcp_lease{state = active},
-%                            Pool1 = lists:keyreplace(
-%                                Identifier, #dhcp_lease.client_id, Pool, Lease1
-%                            ),
-%                            {Lease1, Pool1};
-%                        released ->
-%                            % Re-activate
-%                            Lease1 = Lease#dhcp_lease{state = active},
-%                            Pool1 = lists:keyreplace(
-%                                Identifier, #dhcp_lease.client_id, Pool, Lease1
-%                            ),
-%                            {Lease1, Pool1}
-%                    end,
-%                {L, T}
-%        end,
-%    {reply, {ok, NewLease}, State#{pool => NewPool}};
+    Reply = {ok, Lease},
+    {reply, Reply, State#{pool => [Lease | Pool]}};
+handle_call({accept_offer, Msg}, _From, #{pool := Pool} = State) ->
+    ClientID = Msg#dhcp_message.chaddr,
+    case lists:keyfind(ClientID, #dhcp_lease.client_id, Pool) of
+        false ->
+            {reply, {error, no_offer}, State};
+        Lease ->
+            maybe_cancel_timer(Lease#dhcp_lease.expiration),
+            ActiveLease = Lease#dhcp_lease{
+                state = active,
+                expiration = erlang:send_after(
+                    Lease#dhcp_lease.duration * 1000, self(), {expire, ClientID}
+                )
+            },
+            Pool1 = lists:keyreplace(
+                ClientID, #dhcp_lease.client_id, Pool, ActiveLease
+            ),
+            {reply, {ok, ActiveLease}, State#{pool => Pool1}}
+    end;
 handle_call(dump, _From, #{pool := Pool} = State) ->
     {reply, Pool, State};
 handle_call(_Request, _From, State) ->
-    {reply, ignored, State}.
+    {reply, {error, ignored}, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({expire, ID}, #{pool := Pool} = State) ->
-    % This should crash if we don't find the key..
-    Lease = lists:keyfind(ID, #dhcp_lease.client_id, Pool),
-    S = Lease#dhcp_lease.state,
-    case S of
-        offered ->
-            logger:notice("Offer timed out for ~p", [ID]),
-            Pool1 = lists:keydelete(ID, #dhcp_lease.client_id, Pool),
-            {noreply, State#{pool => Pool1}};
-        _ ->
-            logger:notice("Expiring lease for ~p", [ID]),
-            ExpiredLease = Lease#dhcp_lease{
-                state = expired, expiration = undefined
-            },
-            Pool1 = lists:keyreplace(ID, #dhcp_lease.client_id, Pool, ExpiredLease),
-            {noreply, State#{pool => Pool1}}
+    case lists:keyfind(ID, #dhcp_lease.client_id, Pool) of
+        false ->
+            logger:warning("Expire fired for unknown client ~p", [ID]),
+            {noreply, State};
+        Lease ->
+            case Lease#dhcp_lease.state of
+                offered ->
+                    logger:notice("Offer timed out for ~p", [ID]),
+                    Pool1 = lists:keydelete(ID, #dhcp_lease.client_id, Pool),
+                    {noreply, State#{pool => Pool1}};
+                _ ->
+                    logger:notice("Expiring lease for ~p", [ID]),
+                    ExpiredLease = Lease#dhcp_lease{
+                        state = expired, expiration = undefined
+                    },
+                    Pool1 = lists:keyreplace(
+                        ID, #dhcp_lease.client_id, Pool, ExpiredLease
+                    ),
+                    {noreply, State#{pool => Pool1}}
+            end
     end;
 handle_info(_Info, State) ->
     {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
 
 %% Internal functions
 
@@ -171,13 +153,13 @@ code_change(_OldVsn, State, _Extra) ->
 % 	- Does not harvest expired IPs
 % 	- Does not allow clients to use Option 50 to request an IP
 next_ip(Pool, Range) ->
-    {Start, End, Prefix} = inet_cidr:parse(Range),
-    Low = ip_to_int(Start) + 1,
+    {Start, End, _Prefix} = Cidr = inet_cidr:parse(Range),
+    Low = ip_to_int(Start) + 2,
     Bcast = ip_to_int(End),
     Used = lists:sort([
         ip_to_int(IP)
      || #dhcp_lease{ip = IP} <- Pool,
-        inet_cidr:contains({Start, End, Prefix}, IP)
+        inet_cidr:contains(Cidr, IP)
     ]),
     scan(Used, Low, Bcast).
 
@@ -199,3 +181,8 @@ to_mask(Range) ->
 prefix_to_mask(Len) when Len >= 0, Len =< 32 ->
     <<M:32>> = <<(bnot ((1 bsl (32 - Len)) - 1)):32>>,
     {M bsr 24, (M bsr 16) band 16#FF, (M bsr 8) band 16#FF, M band 16#FF}.
+
+maybe_cancel_timer(undefined) ->
+    ok;
+maybe_cancel_timer(Ref) when is_reference(Ref) ->
+    erlang:cancel_timer(Ref).
