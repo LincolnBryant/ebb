@@ -165,7 +165,7 @@ send_offer(DiscoverMsg, Offer, Socket) ->
 
         options = Options
     },
-	% TODO: Change this to a unicast to the MAC 
+    % TODO: Change this to a unicast to the MAC
     logger:notice("Sending OFFER ~p to ~p", [ClientIP, ChAddr]),
     OfferPacket = ebb_dhcp_packet:encode(OfferMsg),
     send_broadcast(Socket, OfferPacket).
