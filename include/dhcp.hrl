@@ -41,7 +41,7 @@
     client_id :: client_id(),
     state :: lease_state(),
     duration :: non_neg_integer(),
-    expiration :: reference()
+    expiration :: reference() | undefined
 }).
 -type dhcp_lease() :: #dhcp_lease{}.
 -type client_id() :: binary() | mac_address() | udnefined.
