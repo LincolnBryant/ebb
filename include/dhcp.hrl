@@ -44,7 +44,7 @@
     expiration :: reference() | undefined
 }).
 -type dhcp_lease() :: #dhcp_lease{}.
--type client_id() :: binary() | mac_address() | udnefined.
+-type client_id() :: binary() | mac_address() | undefined.
 -type lease_state() :: offered | active | expired | released | declined.
 -type ip4_cidr() :: string().
 
