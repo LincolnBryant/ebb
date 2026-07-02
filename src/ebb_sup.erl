@@ -34,13 +34,11 @@ init([]) ->
     ChildSpecs = [
         #{
             id => ebb_dhcp_pool_mem,
-            start => {ebb_dhcp_pool_mem, start_link, []},
-            type => worker
+            start => {ebb_dhcp_pool_mem, start_link, []}
         },
         #{
             id => ebb_dhcpd,
-            start => {ebb_dhcpd, start_link, []},
-            type => worker
+            start => {ebb_dhcpd, start_link, []}
         }
     ],
     {ok, {SupFlags, ChildSpecs}}.
