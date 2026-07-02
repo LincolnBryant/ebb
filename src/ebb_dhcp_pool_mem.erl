@@ -64,11 +64,16 @@ init([]) ->
         range => ?DEFAULT_CIDR_RANGE
     }}.
 
-%handle_call({create_offer, Identifier, LeaseDuration}, _From, State) ->
 handle_call({get_offer, Msg}, _From, #{pool := Pool} = State) ->
     ClientID = Msg#dhcp_message.chaddr,
-    Result = lists:keyfind(ClientID, #dhcp_lease.client_id, Pool),
-    {reply, {ok, Result}, State};
+    Reply =
+        case lists:keyfind(ClientID, #dhcp_lease.client_id, Pool) of
+            false ->
+                {error, no_such_offer};
+            Lease ->
+                {ok, Lease}
+        end,
+    {reply, Reply, State};
 handle_call({create_offer, Msg}, _From, State) ->
     #{pool := Pool, range := Range} = State,
     ClientID = Msg#dhcp_message.chaddr,
@@ -158,7 +163,8 @@ next_ip(Pool, Range) ->
     Bcast = ip_to_int(End),
     Used = lists:sort([
         ip_to_int(IP)
-     || #dhcp_lease{ip = IP} <- Pool,
+     || #dhcp_lease{ip = IP, state = S} <- Pool,
+        S =/= expired,
         inet_cidr:contains(Cidr, IP)
     ]),
     scan(Used, Low, Bcast).
