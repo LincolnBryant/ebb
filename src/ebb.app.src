@@ -5,7 +5,8 @@
     {mod, {ebb_app, []}},
     {applications, [
         kernel,
-        stdlib
+        stdlib,
+        tomerl
     ]},
     {env, []},
     {modules, []},
