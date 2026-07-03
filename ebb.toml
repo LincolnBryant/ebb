@@ -1,0 +1,19 @@
+# ebb configuration.
+#
+# ebb looks for this file at $EBB_CONFIG, ./ebb.toml, then /etc/ebb/ebb.toml,
+# and refuses to start without it. All keys below are required.
+
+[dhcp]
+# UDP port to bind. DHCP servers listen on 67; ports below 1024 need
+# root or CAP_NET_BIND_SERVICE.
+listen_port = 67
+
+# IPv4 CIDR of the managed subnet. Leases are allocated from this range.
+range = "172.16.0.0/16"
+
+# How long granted leases last, in seconds.
+lease_seconds = 3600
+
+# How long an unaccepted OFFER is held before its IP is reclaimed,
+# in seconds.
+offer_timeout_seconds = 300
