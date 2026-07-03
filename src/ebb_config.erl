@@ -8,7 +8,7 @@ configuration file is required to boot ebb. The file is resolved in this order:
 3. `/etc/ebb/ebb.toml`
 """.
 
--export([load/0, get/1]).
+-export([load/0, get/1, enabled/1]).
 %% Exported for tests
 -export([load_file/1]).
 
@@ -57,7 +57,9 @@ store(Path, Config) ->
     case missing_keys(Config) of
         [] ->
             persistent_term:put(?PT_KEY, Config),
-            logger:notice("Loaded configuration from ~s", [Path]),
+            logger:notice("Loaded configuration from ~s, enabled features: ~p", [
+                Path, [F || F <- maps:keys(features()), is_map_key(F, Config)]
+            ]),
             ok;
         Missing ->
             {error,
@@ -68,40 +70,48 @@ store(Path, Config) ->
 
 -doc """
 Fetch a configuration value by path, e.g. `get([dhcp, listen_port])`.
-Crashes on unknown paths; see `required/0`.
+Crashes on unknown paths; see `features/0`.
 """.
 -spec get([atom()]) -> term().
 get(Path) when is_list(Path) ->
     lists:foldl(fun maps:get/2, persistent_term:get(?PT_KEY), Path).
 
+-doc """
+Features are gated by presence: a feature is enabled iff its section
+exists in the configuration file.
+""".
+-spec enabled(atom()) -> boolean().
+enabled(Feature) ->
+    is_map_key(Feature, persistent_term:get(?PT_KEY)).
+
 %%--------------------------------------------------------------------
 %% Internal
 %%--------------------------------------------------------------------
 
-%% Key paths that must be present for ebb to boot.
-required() ->
-    [
-        [dhcp, listen_port],
-        [dhcp, range],
-        [dhcp, lease_seconds],
-        [dhcp, offer_timeout_seconds]
-    ].
+%% Known feature sections and the keys each requires when present.
+%% An absent section simply disables the feature.
+features() ->
+    #{
+        dhcp => [listen_port, range, lease_seconds, offer_timeout_seconds]
+    }.
 
 missing_keys(Config) ->
-    [path_to_string(Path) || Path <- required(), not has_path(Config, Path)].
-
-has_path(Value, []) when Value =/= undefined ->
-    true;
-has_path(Map, [Key | Rest]) when is_map(Map) ->
-    case Map of
-        #{Key := Value} -> has_path(Value, Rest);
-        #{} -> false
-    end;
-has_path(_, _) ->
-    false.
-
-path_to_string(Path) ->
-    string:join([atom_to_list(Key) || Key <- Path], ".").
+    maps:fold(
+        fun(Feature, RequiredKeys, Acc) ->
+            case Config of
+                #{Feature := Section} ->
+                    Acc ++
+                        [
+                            atom_to_list(Feature) ++ "." ++ atom_to_list(Key)
+                         || Key <- RequiredKeys, not is_map_key(Key, Section)
+                        ];
+                #{} ->
+                    Acc
+            end
+        end,
+        [],
+        features()
+    ).
 
 resolve_path() ->
     case os:getenv("EBB_CONFIG") of
@@ -137,21 +147,14 @@ explicit_path(Path) ->
     end.
 
 %% tomerl produces binary keys; convert them (and table arrays) to the
-%% atom-keyed shape used internally. Values are left untouched. Key atoms
-%% must already exist, i.e. be mentioned somewhere in loaded code; a key
-%% nothing could ever read is reported as a config error.
+%% atom-keyed shape used internally.
 atomize(Map) when is_map(Map) ->
     maps:fold(
-        fun(K, V, Acc) -> Acc#{atomize_key(K) => atomize(V)} end, #{}, Map
+        fun(K, V, Acc) -> Acc#{binary_to_existing_atom(K) => atomize(V)} end,
+        #{},
+        Map
     );
 atomize(List) when is_list(List) ->
     [atomize(V) || V <- List];
 atomize(Value) ->
     Value.
-
-atomize_key(Key) ->
-    try
-        binary_to_existing_atom(Key)
-    catch
-        error:badarg -> throw({unknown_key, Key})
-    end.
