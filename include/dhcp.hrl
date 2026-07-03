@@ -1,13 +1,7 @@
 -define(DHCP_MAGIC_COOKIE, 16#63825363).
-
--define(DEFAULT_LEASE_SECONDS, 3600).
 % TODO
 %-define(MAX_LEASE_SECONDS, 86400).
 %-define(MIN_LEASE_SECONDS, 300).
-
--define(DEFAULT_OFFER_TIMEOUT_SECONDS, 300).
-
--define(DEFAULT_CIDR_RANGE, "172.16.0.0/16").
 
 -record(dhcp_message, {
     % Header
