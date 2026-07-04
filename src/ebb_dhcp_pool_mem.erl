@@ -61,7 +61,7 @@ dump() ->
 init([]) ->
     {ok, #{
         pool => [],
-        range => ?DEFAULT_CIDR_RANGE
+        range => ebb_config:get([dhcp, range])
     }}.
 
 handle_call({get_offer, Msg}, _From, #{pool := Pool} = State) ->
@@ -85,7 +85,7 @@ handle_call({create_offer, Msg}, _From, State) ->
                 % otherwise give them the default
                 Value;
             _ ->
-                ?DEFAULT_LEASE_SECONDS
+                ebb_config:get([dhcp, lease_seconds])
         end,
     % See next_ip/2 deficiencies
     {ok, ClientIP} = next_ip(Pool, Range),
@@ -95,7 +95,9 @@ handle_call({create_offer, Msg}, _From, State) ->
         subnet_mask = to_mask(Range),
         state = offered,
         expiration = erlang:send_after(
-            ?DEFAULT_OFFER_TIMEOUT_SECONDS * 1000, self(), {expire, ClientID}
+            ebb_config:get([dhcp, offer_timeout_seconds]) * 1000,
+            self(),
+            {expire, ClientID}
         ),
         duration = LeaseDuration
     },

@@ -5,7 +5,14 @@
     {mod, {ebb_app, []}},
     {applications, [
         kernel,
-        stdlib
+        stdlib,
+        tomerl
+        % NOTE: we also depend on the erl_cidr package, whose OTP app is
+        % confusingly named inet_cidr. Listing either name here breaks
+        % rebar3 dialyzer (app/package name mismatch). It is a pure
+        % library (no processes to start), so omitting it is safe in
+        % dev; a future release definition must include inet_cidr
+        % explicitly.
     ]},
     {env, []},
     {modules, []},

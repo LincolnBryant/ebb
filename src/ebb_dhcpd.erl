@@ -30,7 +30,8 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {ok, Socket} = gen_udp:open(67, [{active, once}, {broadcast, true}, binary]),
+    Port = ebb_config:get([dhcp, listen_port]),
+    {ok, Socket} = gen_udp:open(Port, [{active, once}, {broadcast, true}, binary]),
     {ok, #{
         socket => Socket
     }}.
@@ -254,7 +255,7 @@ server_ip(Socket) ->
     end.
 
 guess_server_ip() ->
-    Cidr = inet_cidr:parse(?DEFAULT_CIDR_RANGE),
+    Cidr = inet_cidr:parse(ebb_config:get([dhcp, range])),
     {Start, _End, _Prefix} = Cidr,
     {ok, Addrs} = inet:getifaddrs(),
     case
@@ -275,5 +276,5 @@ send_broadcast(Socket, Packet) ->
     gen_udp:send(Socket, Bcast, 68, Packet).
 
 subnet_broadcast() ->
-    {_Start, End, _Prefix} = inet_cidr:parse(?DEFAULT_CIDR_RANGE),
+    {_Start, End, _Prefix} = inet_cidr:parse(ebb_config:get([dhcp, range])),
     End.
