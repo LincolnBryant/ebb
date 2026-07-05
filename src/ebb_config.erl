@@ -25,7 +25,7 @@ unparseable, or any required key is missing.
 load() ->
     maybe
         {path, File} ?= resolve_path(),
-        logger:notice("Reading configuration from ~p", File),
+        logger:notice("Reading configuration from ~p", [File]),
         {ok, Config} ?= read_toml(File),
         logger:notice("Parsed configuration as valid TOML"),
         ok ?= ebb_config_validator:check_structure(Config),
