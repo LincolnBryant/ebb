@@ -30,10 +30,12 @@ start_link(Interface, Cidr) ->
     gen_server:start_link(?MODULE, [Interface, Cidr], []).
 
 init([Interface, _Cidr]) ->
-	{ok, AllAddrs} = inet:getifaddrs(),
-	IfOpts = proplists:get_value(Interface, AllAddrs),
-	Addr = proplists:get_value(addr, IfOpts),
-    {ok, Socket} = gen_udp:open(?DHCP_PORT, [{ip, Addr}, {active, once}, {broadcast, true}, binary]),
+    {ok, AllAddrs} = inet:getifaddrs(),
+    IfOpts = proplists:get_value(Interface, AllAddrs),
+    Addr = proplists:get_value(addr, IfOpts),
+    {ok, Socket} = gen_udp:open(?DHCP_PORT, [
+        {ip, Addr}, {active, once}, {broadcast, true}, binary
+    ]),
     {ok, #{
         socket => Socket
     }}.
