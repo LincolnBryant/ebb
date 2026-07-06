@@ -282,6 +282,7 @@ send_broadcast(Socket, Packet) ->
     Bcast = subnet_broadcast(),
     gen_udp:send(Socket, Bcast, 68, Packet).
 
+% TODO
 send_unicast(Socket, Packet) ->
     ok.
 
