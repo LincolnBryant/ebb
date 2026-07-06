@@ -11,7 +11,7 @@ servers.
 
 %% API
 -export([
-    start_link/0,
+    start_link/2,
     % for testing
     route_msg/2
 ]).
@@ -26,12 +26,16 @@ servers.
     code_change/3
 ]).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Interface, Cidr) ->
+    gen_server:start_link(?MODULE, [Interface, Cidr], []).
 
-init([]) ->
-    Port = ebb_config:get([dhcp, listen_port]),
-    {ok, Socket} = gen_udp:open(Port, [{active, once}, {broadcast, true}, binary]),
+init([Interface, _Cidr]) ->
+    {ok, AllAddrs} = inet:getifaddrs(),
+    IfOpts = proplists:get_value(Interface, AllAddrs),
+    Addr = proplists:get_value(addr, IfOpts),
+    {ok, Socket} = gen_udp:open(?DHCP_PORT, [
+        {ip, Addr}, {active, once}, {broadcast, true}, binary
+    ]),
     {ok, #{
         socket => Socket
     }}.
@@ -130,7 +134,8 @@ send_offer(DiscoverMsg, Offer, Socket) ->
         chaddr = ChAddr,
         giaddr = GiAddr,
         htype = HType,
-        hlen = HLen
+        hlen = HLen,
+        flags = Flags
     } = DiscoverMsg,
     % Pull the client IP out of the offer
     #dhcp_lease{
@@ -166,10 +171,14 @@ send_offer(DiscoverMsg, Offer, Socket) ->
 
         options = Options
     },
-    % TODO: Change this to a unicast to the MAC
-    logger:notice("Sending OFFER ~p to ~p", [ClientIP, ChAddr]),
     OfferPacket = ebb_dhcp_packet:encode(OfferMsg),
-    send_broadcast(Socket, OfferPacket).
+    case Flags of
+        [broadcast] ->
+            logger:notice("Broadcasting OFFER ~p to ~p", [ClientIP, ChAddr]),
+            send_broadcast(Socket, OfferPacket);
+        [] ->
+            send_unicast(Socket, OfferPacket)
+    end.
 
 send_ack(RequestMsg, Lease, Socket) ->
     #dhcp_message{
@@ -274,6 +283,10 @@ guess_server_ip() ->
 send_broadcast(Socket, Packet) ->
     Bcast = subnet_broadcast(),
     gen_udp:send(Socket, Bcast, 68, Packet).
+
+% TODO
+send_unicast(Socket, Packet) ->
+    ok.
 
 subnet_broadcast() ->
     {_Start, End, _Prefix} = inet_cidr:parse(ebb_config:get([dhcp, range])),

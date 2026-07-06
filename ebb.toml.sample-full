@@ -1,0 +1,48 @@
+# ebb sample configuration.
+#
+# A section's presence enables it. Unknown keys refuse boot.
+# Keys marked optional may be omitted; defaults are shown.
+# All other keys are required.
+
+[dhcp]
+
+[[dhcp.subnet]]
+cidr = "192.168.1.0/24"
+interface = "eno1"
+
+# Optional. Netboot fields placed in the BOOTP header of replies.
+next_server = "192.168.1.5"
+boot_file = "ipxe.efi"
+
+# Optional. DHCP protocol options; a key's presence means "send it".
+option.routers = "192.168.1.1"
+option.domain_name_servers = "192.168.1.2"
+
+[[dhcp.subnet.pool]]
+range = "192.168.1.50-192.168.1.100"
+lease_seconds = 3600          # optional, default 3600
+offer_timeout_seconds = 300   # optional, default 300
+backend.type = "mem"          # optional, default "mem"
+
+# backend.type selects the storage backend and which backend.* keys apply:
+#   "mem"     no parameters
+#   "file"    requires backend.path
+[[dhcp.subnet.pool]]
+range = "192.168.1.120-192.168.1.200"
+backend.type = "file"
+backend.path = "/var/lib/ebb/leases-eno1"
+
+[[dhcp.subnet]]
+cidr = "10.20.0.0/24"
+interface = "eno2"
+
+[[dhcp.subnet.pool]]
+range = "10.20.0.50-10.20.0.200"
+
+# proxyDHCP: supply PXE boot information on a network whose addressing is
+# owned by an existing DHCP server. Proxy interfaces must not overlap with
+# subnet interfaces.
+[[dhcp.proxy]]
+interface = "eno3"
+next_server = "10.30.0.5"
+boot_file = "ipxe.efi"

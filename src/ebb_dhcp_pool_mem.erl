@@ -18,7 +18,7 @@ It should be used only for demo purposes.
 
 %% API
 -export([
-    start_link/0,
+    start_link/1,
     get_offer/1,
     create_offer/1,
     accept_offer/1,
@@ -33,8 +33,8 @@ It should be used only for demo purposes.
     handle_info/2
 ]).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Range) ->
+    gen_server:start_link(?MODULE, [Range], []).
 
 -spec get_offer(dhcp_message()) -> {ok, dhcp_lease()} | {error, term()}.
 get_offer(Msg) ->
@@ -58,10 +58,10 @@ accept_offer(Msg) ->
 dump() ->
     gen_server:call(?MODULE, dump).
 
-init([]) ->
+init([Range]) ->
     {ok, #{
         pool => [],
-        range => ebb_config:get([dhcp, range])
+        range => Range
     }}.
 
 handle_call({get_offer, Msg}, _From, #{pool := Pool} = State) ->
