@@ -81,13 +81,14 @@ handle_cast(_Msg, State) ->
 handle_info({udp, Socket, _Addr, _Port, Packet}, State) ->
     % Rearm the socket for another message
     inet:setopts(Socket, [{active, once}]),
-	try 
-		Msg = ebb_dhcp_packet:decode(Packet),
-    	% Consume the packet and send a reply as a side effect, as necessary
-    	route_msg(Msg, Socket)
-	catch error:function_clause:_Stacktrace ->
-		logger:debug("Possibly malformed packet: ~p", [Packet])
-	end,
+    try
+        Msg = ebb_dhcp_packet:decode(Packet),
+        % Consume the packet and send a reply as a side effect, as necessary
+        route_msg(Msg, Socket)
+    catch
+        error:function_clause:_Stacktrace ->
+            logger:debug("Possibly malformed packet: ~p", [Packet])
+    end,
     {noreply, State};
 handle_info(_Msg, State) ->
     {noreply, State}.
