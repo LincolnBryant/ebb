@@ -1,9 +1,8 @@
 -define(DHCP_MAGIC_COOKIE, 16#63825363).
 % TODO
-%-define(MAX_LEASE_SECONDS, 86400).
-%-define(MIN_LEASE_SECONDS, 300).
-
 %% Configuration defaults for omitted optional keys.
+-define(DEFAULT_MAX_LEASE_SECONDS, 86400).
+-define(DEFAULT_MIN_LEASE_SECONDS, 300).
 -define(DEFAULT_LEASE_SECONDS, 3600).
 -define(DEFAULT_OFFER_TIMEOUT_SECONDS, 300).
 -define(DEFAULT_POOL_BACKEND, <<"mem">>).
