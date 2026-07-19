@@ -30,15 +30,21 @@ start_link(Interface, Cidr) ->
     gen_server:start_link(?MODULE, [Interface, Cidr], []).
 
 init([Interface, _Cidr]) ->
+	% This can potentially fail if an interface doesn't exist
     {ok, AllAddrs} = inet:getifaddrs(),
-    IfOpts = proplists:get_value(Interface, AllAddrs),
-    Addr = proplists:get_value(addr, IfOpts),
-    {ok, Socket} = gen_udp:open(?DHCP_PORT, [
-        {ip, Addr}, {active, once}, {broadcast, true}, binary
-    ]),
-    {ok, #{
-        socket => Socket
-    }}.
+    case proplists:get_value(Interface, AllAddrs, false) of 
+		false ->
+			logger:critical("Cannot find interface ~p", [Interface]),
+			{stop, shutdown};
+		IfOpts -> 
+			Addr = proplists:get_value(addr, IfOpts),
+			{ok, Socket} = gen_udp:open(?DHCP_PORT, [
+				{ip, Addr}, {active, once}, {broadcast, true}, binary
+			]),
+			{ok, #{
+				socket => Socket
+			}}
+	end.
 
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.

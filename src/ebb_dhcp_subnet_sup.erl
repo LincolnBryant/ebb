@@ -24,13 +24,13 @@ init([SubnetMap]) ->
         intensity => 3,
         period => 5
     },
-    logger:notice("SubnetMap: ~p", [SubnetMap]),
     ChildSpecs = pool_specs(SubnetMap),
     {ok, {SupFlags, ChildSpecs}}.
 
 % For each subnet, start a subnet supervisor
 
 pool_specs(#{interface := Interface, cidr := Cidr, pool := Pools}) ->
+	logger:notice("Starting DHCP subnet server on interface ~p for pools ~p", [Interface, Pools]),
     DhcpdSpec = #{
         id => ebb_dhcpd,
         start => {ebb_dhcpd, start_link, [Interface, Cidr]}

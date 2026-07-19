@@ -21,12 +21,10 @@ init([Subnets]) ->
         period => 5
     },
     ChildSpecs = subnet_specs(Subnets),
-    logger:notice("Child specs: ~p", [ChildSpecs]),
     {ok, {SupFlags, ChildSpecs}}.
 
 % For each subnet, start a subnet supervisor
 subnet_specs(Subnets) ->
-    logger:notice("Subnets: ~p", [Subnets]),
     [
         #{
             id => {subnet_sup, Cidr},
