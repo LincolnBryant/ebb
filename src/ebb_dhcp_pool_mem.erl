@@ -79,14 +79,6 @@ handle_call({create_offer, Msg}, _From, State) ->
     ClientID = Msg#dhcp_message.chaddr,
     Options = Msg#dhcp_message.options,
     LeaseDuration = calculate_lease_duration(Options),
-        case proplists:get_value(lease_time, Options, false) of
-            Value when is_integer(Value) ->
-                % Ensure that we're getting an integer from the client message,
-                % otherwise give them the default
-                Value;
-            _ ->
-                ebb_config:get([dhcp, lease_seconds])
-        end,
     % See next_ip/2 deficiencies
     {ok, ClientIP} = next_ip(Pool, Range),
     Lease = #dhcp_lease{
