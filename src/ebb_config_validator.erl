@@ -32,8 +32,10 @@ schema() ->
                         {array, #{
                             range => required,
                             lease_seconds => {default, ?DEFAULT_LEASE_SECONDS},
-                            min_lease_seconds => {default, ?DEFAULT_MIN_LEASE_SECONDS},
-                            max_lease_seconds => {default, ?DEFAULT_MAX_LEASE_SECONDS},
+                            min_lease_seconds =>
+                                {default, ?DEFAULT_MIN_LEASE_SECONDS},
+                            max_lease_seconds =>
+                                {default, ?DEFAULT_MAX_LEASE_SECONDS},
                             offer_timeout_seconds =>
                                 {default, ?DEFAULT_OFFER_TIMEOUT_SECONDS},
                             backend => #{

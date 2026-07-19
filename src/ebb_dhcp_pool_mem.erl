@@ -191,10 +191,10 @@ calculate_lease_duration(Options) ->
     LeaseSeconds = ebb_config:get([dhcp, lease_seconds]),
     MinLeaseSeconds = ebb_config:get([dhcp, min_lease_seconds]),
     MaxLeaseSeconds = ebb_config:get([dhcp, max_lease_seconds]),
-	case proplists:get_value(lease_time, Options, false) of
-		false -> 
-			LeaseSeconds;
-		ProposedSeconds ->
-			% Clamp the proposed value
-			min(MaxLeaseSeconds, max(MinLeaseSeconds, ProposedSeconds))
-	end.
+    case proplists:get_value(lease_time, Options, false) of
+        false ->
+            LeaseSeconds;
+        ProposedSeconds ->
+            % Clamp the proposed value
+            min(MaxLeaseSeconds, max(MinLeaseSeconds, ProposedSeconds))
+    end.
